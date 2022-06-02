@@ -9,6 +9,7 @@ import (
 
 var Tag = "json"
 var ArgFormat = "$%v"
+var ErrNoRows = fmt.Errorf("no rows")
 
 func FilterFieldCall(tag, filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
 	var inc, exc string
@@ -305,5 +306,34 @@ func Query(queryer Queryer, v interface{}, filter, sql string, args []interface{
 	}
 	defer rows.Close()
 	err = Scan(rows, v, filter, dest...)
+	return
+}
+
+func ScanRow(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
+	if !rows.Next() {
+		err = ErrNoRows
+		return
+	}
+	value := reflect.New(reflectType)
+	err = rows.Scan(ScanArgs(value.Interface(), filter)...)
+	if err != nil {
+		return
+	}
+	err = destSet(value, dest...)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func QueryRow(queryer Queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	rows, err := queryer.Query(sql, args...)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	err = ScanRow(rows, v, filter, dest...)
 	return
 }

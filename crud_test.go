@@ -23,6 +23,14 @@ type PoolQueryer struct {
 }
 
 func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err error) {
+	if sql == "no" {
+		rows = &TestRows{
+			Err:   t.ScanErr,
+			Index: -1,
+		}
+		err = t.QueryErr
+		return
+	}
 	title := "test"
 	rows = &TestRows{
 		Err:   t.ScanErr,
@@ -265,6 +273,14 @@ func ScanSimple() (err error) {
 	}, "", "\t")
 	fmt.Println("-->\n", string(data))
 
+	err = QueryRow(
+		&PoolQueryer{}, &Simple{}, "#all",
+		"sql", []interface{}{"arg"},
+		&simple,
+	)
+	if err != nil {
+		return
+	}
 	return
 }
 
@@ -315,7 +331,24 @@ func ScanError() (err error) {
 		err = fmt.Errorf("not error")
 		return
 	}
-
+	err = QueryRow(
+		&PoolQueryer{}, &Simple{}, "#all",
+		"sql", []interface{}{"arg"},
+		&images, "not",
+	)
+	if err == nil {
+		err = fmt.Errorf("not error")
+		return
+	}
+	err = QueryRow(
+		&PoolQueryer{}, &Simple{}, "#all",
+		"no", []interface{}{"arg"},
+		&images, "image",
+	)
+	if err == nil {
+		err = fmt.Errorf("not error")
+		return
+	}
 	//
 	var simples map[int64]*Simple
 	err = Query(
@@ -386,6 +419,24 @@ func ScanError() (err error) {
 		return
 	}
 	err = Query(
+		&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{}, "#all",
+		"sql", []interface{}{"arg"},
+		&simples, "tid",
+	)
+	if err == nil {
+		err = fmt.Errorf("not error")
+		return
+	}
+	err = QueryRow(
+		&PoolQueryer{QueryErr: fmt.Errorf("xx")}, &Simple{}, "#all",
+		"sql", []interface{}{"arg"},
+		&simples, "tid",
+	)
+	if err == nil {
+		err = fmt.Errorf("not error")
+		return
+	}
+	err = QueryRow(
 		&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simples, "tid",
