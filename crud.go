@@ -59,6 +59,42 @@ func FilterFieldCall(tag, filter string, v interface{}, call func(name string, f
 	}
 }
 
+func AppendInsert(fields, param []string, args []interface{}, ok bool, field, format string, v interface{}) (fields_, param_ []string, args_ []interface{}) {
+	fields_, param_, args_ = fields, param, args
+	if ok {
+		args_ = append(args_, v)
+		param_ = append(param_, fmt.Sprintf(format, len(args_)))
+		fields_ = append(fields_, field)
+	}
+	return
+}
+
+func AppendSet(sets []string, args []interface{}, ok bool, format string, v interface{}) (sets_ []string, args_ []interface{}) {
+	sets_, args_ = sets, args
+	if ok {
+		args_ = append(args_, v)
+		sets_ = append(sets_, fmt.Sprintf(format, len(args_)))
+	}
+	return
+}
+
+func AppendWhere(where []string, args []interface{}, ok bool, format string, v interface{}) (where_ []string, args_ []interface{}) {
+	where_, args_ = where, args
+	if ok {
+		args_ = append(args_, v)
+		where_ = append(where_, fmt.Sprintf(format, len(args_)))
+	}
+	return
+}
+
+func JoinWhere(sql string, where []string, sep string, suffix ...string) (sql_ string) {
+	sql_ = sql
+	if len(where) > 0 {
+		sql_ += " where " + strings.Join(where, " "+sep+" ") + " " + strings.Join(suffix, " ")
+	}
+	return
+}
+
 func InsertArgs(v interface{}, filter string) (fields, param []string, args []interface{}) {
 	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
@@ -101,23 +137,6 @@ func QueryField(v interface{}, filter string) (fields string) {
 func QuerySQL(v interface{}, filter, table string, suffix ...string) (sql string) {
 	fields := QueryField(v, filter)
 	sql = fmt.Sprintf(`select %v from %v %v`, fields, table, strings.Join(suffix, " "))
-	return
-}
-
-func AppendWhere(where []string, args []interface{}, ok bool, format string, v interface{}) (where_ []string, args_ []interface{}) {
-	where_, args_ = where, args
-	if ok {
-		args_ = append(args_, v)
-		where_ = append(where_, fmt.Sprintf(format, len(args_)))
-	}
-	return
-}
-
-func JoinWhere(sql string, where []string, sep string, suffix ...string) (sql_ string) {
-	sql_ = sql
-	if len(where) > 0 {
-		sql_ += " where " + strings.Join(where, " "+sep+" ") + " " + strings.Join(suffix, " ")
-	}
 	return
 }
 

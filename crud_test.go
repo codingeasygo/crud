@@ -133,8 +133,9 @@ func AddSimple(simple *Simple) (err error) {
 		err = fmt.Errorf("error")
 		return
 	}
-	fileds, _, _ := InsertArgs(simple, "")
-	if len(fileds) < 1 {
+	fileds, param, args := InsertArgs(simple, "")
+	fileds, param, args = AppendInsert(fileds, param, args, true, "xx", "$%v", "1")
+	if len(fileds) < 1 || len(param) < 1 || len(args) < 1 {
 		err = fmt.Errorf("error")
 		return
 	}
@@ -169,6 +170,7 @@ func UpdateSimple(simple *Simple) (eff int, err error) {
 	fmt.Printf("   --->%v\n", args)
 
 	sets, args := UpdateArgs(simple, "")
+	sets, args = AppendSet(sets, args, true, "xx=$%v", "1")
 	fmt.Printf("update\n")
 	fmt.Printf("   --->%v\n", sets)
 	fmt.Printf("   --->%v\n", args)
