@@ -31,6 +31,19 @@ func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err err
 		err = t.QueryErr
 		return
 	}
+	if sql == "int64" {
+		rows = &TestRows{
+			Err:   t.ScanErr,
+			Index: -1,
+			Values: [][]interface{}{
+				{int64(1)},
+				{int64(2)},
+				{int64(3)},
+			},
+		}
+		err = t.QueryErr
+		return
+	}
 	title := "test"
 	rows = &TestRows{
 		Err:   t.ScanErr,
@@ -281,6 +294,28 @@ func ScanSimple() (err error) {
 	if err != nil {
 		return
 	}
+
+	var testIDs0 []int64
+	var testIDs1 int64
+	err = Query(
+		&PoolQueryer{}, int64(0), "",
+		"int64", []interface{}{"arg"},
+		&testIDs0,
+	)
+	if err != nil || len(testIDs0) != 3 {
+		err = fmt.Errorf("error")
+		return
+	}
+	err = QueryRow(
+		&PoolQueryer{}, int64(0), "",
+		"int64", []interface{}{"arg"},
+		&testIDs1,
+	)
+	if err != nil || testIDs1 < 1 {
+		err = fmt.Errorf("error")
+		return
+	}
+	fmt.Println("--->", testIDs0)
 	return
 }
 
@@ -293,7 +328,6 @@ func ScanError() (err error) {
 		},
 	)
 	ScanArgs(&Simple{}, "#all")
-	ScanArgs(1, "#all")
 	//
 	var images []*string
 	err = Query(

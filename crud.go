@@ -187,6 +187,10 @@ func destSet(value reflect.Value, dests ...interface{}) (err error) {
 		destValue := reflect.Indirect(reflect.ValueOf(dests[i]))
 		destKind := destValue.Kind()
 		destType := destValue.Type()
+		if destType == value.Type() {
+			destValue.Set(value)
+			continue
+		}
 		switch destKind {
 		case reflect.Func:
 			destValue.Call([]reflect.Value{value})
@@ -235,7 +239,7 @@ func destSet(value reflect.Value, dests ...interface{}) (err error) {
 			}
 		case reflect.Slice:
 			if destType.Elem() == value.Type() {
-				destValue.Set(reflect.Append(reflect.Indirect(destValue), value))
+				destValue.Set(reflect.Append(destValue, value))
 				continue
 			}
 			if i+1 >= len(dests) {
@@ -274,8 +278,6 @@ func destSet(value reflect.Value, dests ...interface{}) (err error) {
 				continue
 			}
 			destValue.Set(reflect.Append(reflect.Indirect(destValue), targetValue))
-		case reflect.Ptr:
-			destValue.Set(value)
 		default:
 			err = fmt.Errorf("type %v is not supported", destKind)
 		}
@@ -287,6 +289,7 @@ func destSet(value reflect.Value, dests ...interface{}) (err error) {
 }
 
 func Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
+	isPtr := reflect.ValueOf(v).Kind() == reflect.Ptr
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	for rows.Next() {
@@ -294,6 +297,9 @@ func Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err err
 		err = rows.Scan(ScanArgs(value.Interface(), filter)...)
 		if err != nil {
 			break
+		}
+		if !isPtr {
+			value = reflect.Indirect(value)
 		}
 		err = destSet(value, dest...)
 		if err != nil {
@@ -314,6 +320,7 @@ func Query(queryer Queryer, v interface{}, filter, sql string, args []interface{
 }
 
 func ScanRow(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
+	isPtr := reflect.ValueOf(v).Kind() == reflect.Ptr
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	if !rows.Next() {
@@ -324,6 +331,9 @@ func ScanRow(rows Rows, v interface{}, filter string, dest ...interface{}) (err 
 	err = rows.Scan(ScanArgs(value.Interface(), filter)...)
 	if err != nil {
 		return
+	}
+	if !isPtr {
+		value = reflect.Indirect(value)
 	}
 	err = destSet(value, dest...)
 	if err != nil {
