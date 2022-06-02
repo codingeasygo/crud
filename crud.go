@@ -12,6 +12,12 @@ var ArgFormat = "$%v"
 var ErrNoRows = fmt.Errorf("no rows")
 
 func FilterFieldCall(tag, filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
+	if reflectType.Kind() != reflect.Struct {
+		call("", reflect.StructField{}, v)
+		return
+	}
 	var inc, exc string
 	var incNil, incZero bool
 	if len(filter) > 0 {
@@ -29,8 +35,6 @@ func FilterFieldCall(tag, filter string, v interface{}, call func(name string, f
 			incZero = strings.Contains(","+parts[1]+",", ",zero,") || strings.Contains(","+parts[1]+",", ",all,")
 		}
 	}
-	reflectValue := reflect.Indirect(reflect.ValueOf(v))
-	reflectType := reflectValue.Type()
 	numField := reflectType.NumField()
 	for i := 0; i < numField; i++ {
 		fieldValue := reflectValue.Field(i)

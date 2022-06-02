@@ -293,6 +293,7 @@ func ScanError() (err error) {
 		},
 	)
 	ScanArgs(&Simple{}, "#all")
+	ScanArgs(1, "#all")
 	//
 	var images []*string
 	err = Query(
