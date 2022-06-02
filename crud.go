@@ -59,32 +59,26 @@ func FilterFieldCall(tag, filter string, v interface{}, call func(name string, f
 	}
 }
 
-func InsertArgs(v interface{}, filter string) (fields, param string, args []interface{}) {
-	fieldsList := []string{}
-	paramList := []string{}
+func InsertArgs(v interface{}, filter string) (fields, param []string, args []interface{}) {
 	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
-		fieldsList = append(fieldsList, name)
 		args = append(args, value)
-		paramList = append(paramList, fmt.Sprintf(ArgFormat, len(args)))
+		fields = append(fields, name)
+		param = append(param, fmt.Sprintf(ArgFormat, len(args)))
 	})
-	fields = strings.Join(fieldsList, ",")
-	param = strings.Join(paramList, ",")
 	return
 }
 
 func InsertSQL(v interface{}, filter, table string, suffix ...string) (sql string, args []interface{}) {
 	fields, param, args := InsertArgs(v, filter)
-	sql = fmt.Sprintf(`insert into %v(%v) values(%v) %v`, table, fields, param, strings.Join(suffix, " "))
+	sql = fmt.Sprintf(`insert into %v(%v) values(%v) %v`, table, strings.Join(fields, ","), strings.Join(param, ","), strings.Join(suffix, " "))
 	return
 }
 
-func UpdateArgs(v interface{}, filter string) (sets string, args []interface{}) {
-	fieldsList := []string{}
+func UpdateArgs(v interface{}, filter string) (sets []string, args []interface{}) {
 	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
-		fieldsList = append(fieldsList, fmt.Sprintf("%v="+ArgFormat, name, len(args)))
+		sets = append(sets, fmt.Sprintf("%v="+ArgFormat, name, len(args)))
 	})
-	sets = strings.Join(fieldsList, ",")
 	return
 }
 
