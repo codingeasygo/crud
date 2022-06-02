@@ -130,7 +130,7 @@ func UpdateArgs(v interface{}, filter string) (sets []string, args []interface{}
 
 func UpdateSQL(v interface{}, filter string, table string, suffix ...string) (sql string, args []interface{}) {
 	sets, args := UpdateArgs(v, filter)
-	sql = fmt.Sprintf(`update %v set %v %v`, table, sets, strings.Join(suffix, " "))
+	sql = fmt.Sprintf(`update %v set %v %v`, table, strings.Join(sets, ","), strings.Join(suffix, " "))
 	return
 }
 
