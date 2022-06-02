@@ -59,30 +59,40 @@ func FilterFieldCall(tag, filter string, v interface{}, call func(name string, f
 	}
 }
 
-func AppendInsert(fields, param []string, args []interface{}, ok bool, field, format string, v interface{}) (fields_, param_ []string, args_ []interface{}) {
+func AppendInsert(fields, param []string, args []interface{}, ok bool, formats ...interface{}) (fields_, param_ []string, args_ []interface{}) {
 	fields_, param_, args_ = fields, param, args
 	if ok {
-		args_ = append(args_, v)
-		param_ = append(param_, fmt.Sprintf(format, len(args_)))
-		fields_ = append(fields_, field)
+		n := len(formats) / 2
+		for i := 0; i < n; i++ {
+			args_ = append(args_, formats[i*2+1])
+			parts := strings.SplitN(formats[i*2].(string), "=", 2)
+			param_ = append(param_, fmt.Sprintf(parts[1], len(args_)))
+			fields_ = append(fields_, parts[0])
+		}
 	}
 	return
 }
 
-func AppendSet(sets []string, args []interface{}, ok bool, format string, v interface{}) (sets_ []string, args_ []interface{}) {
+func AppendSet(sets []string, args []interface{}, ok bool, formats ...interface{}) (sets_ []string, args_ []interface{}) {
 	sets_, args_ = sets, args
 	if ok {
-		args_ = append(args_, v)
-		sets_ = append(sets_, fmt.Sprintf(format, len(args_)))
+		n := len(formats) / 2
+		for i := 0; i < n; i++ {
+			args_ = append(args_, formats[i*2+1])
+			sets_ = append(sets_, fmt.Sprintf(formats[i*2].(string), len(args_)))
+		}
 	}
 	return
 }
 
-func AppendWhere(where []string, args []interface{}, ok bool, format string, v interface{}) (where_ []string, args_ []interface{}) {
+func AppendWhere(where []string, args []interface{}, ok bool, formats ...interface{}) (where_ []string, args_ []interface{}) {
 	where_, args_ = where, args
 	if ok {
-		args_ = append(args_, v)
-		where_ = append(where_, fmt.Sprintf(format, len(args_)))
+		n := len(formats) / 2
+		for i := 0; i < n; i++ {
+			args_ = append(args_, formats[i*2+1])
+			where_ = append(where_, fmt.Sprintf(formats[i*2].(string), len(args_)))
+		}
 	}
 	return
 }

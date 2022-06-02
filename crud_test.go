@@ -134,7 +134,7 @@ func AddSimple(simple *Simple) (err error) {
 		return
 	}
 	fileds, param, args := InsertArgs(simple, "")
-	fileds, param, args = AppendInsert(fileds, param, args, true, "xx", "$%v", "1")
+	fileds, param, args = AppendInsert(fileds, param, args, true, "xx=$%v", "1")
 	if len(fileds) < 1 || len(param) < 1 || len(args) < 1 {
 		err = fmt.Errorf("error")
 		return
