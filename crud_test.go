@@ -9,31 +9,12 @@ import (
 	"time"
 )
 
-func TestJoin(t *testing.T) {
-	if Join([]int{}, ",", "", "") != "" {
-		t.Error("error")
-		return
+func JSON(v interface{}) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err.Error()
 	}
-	if Join([]int{1, 2, 3}, ",", "", "") != "1,2,3" {
-		t.Error("error")
-		return
-	}
-	ival1, ival2, ival3 := 1, 2, 3
-	if Join([]*int{&ival1, &ival2, &ival3}, ",", "", "") != "1,2,3" {
-		t.Error("error")
-		return
-	}
-	sval1, sval2, sval3 := "1", "2", "3"
-	if Join([]*string{&sval1, &sval2, &sval3}, ",", "", "") != "1,2,3" {
-		t.Error("error")
-		return
-	}
-	func() {
-		defer func() {
-			recover()
-		}()
-		Join("xx", ",", "", "")
-	}()
+	return string(data)
 }
 
 type PoolQueryer struct {
@@ -56,7 +37,7 @@ func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err err
 				CreateTime: time.Now(),
 				UpdateTime: time.Now(),
 				Status:     SimpleStatusNormal,
-			}, false, false, "", ""),
+			}, "#all"),
 			ScanArgs(&Simple{
 				TID:        2,
 				UserID:     0,
@@ -66,7 +47,7 @@ func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err err
 				CreateTime: time.Now(),
 				UpdateTime: time.Now(),
 				Status:     SimpleStatusNormal,
-			}, false, false, "", ""),
+			}, "#all"),
 			ScanArgs(&Simple{
 				TID:        2,
 				UserID:     0,
@@ -75,7 +56,7 @@ func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err err
 				CreateTime: time.Now(),
 				UpdateTime: time.Now(),
 				Status:     SimpleStatusNormal,
-			}, false, false, "", ""),
+			}, "#all"),
 		},
 	}
 	err = t.QueryErr
@@ -89,6 +70,10 @@ type TestRows struct {
 }
 
 func (t *TestRows) Scan(dests ...interface{}) (err error) {
+	if len(dests) < 1 {
+		err = fmt.Errorf("dest is empty")
+		return
+	}
 	err = t.Err
 	values := t.Values[t.Index]
 	for i, dest := range dests {
@@ -136,11 +121,11 @@ type Simple struct {
 func AddSimple(simple *Simple) (err error) {
 	simple.CreateTime = time.Now()
 	simple.UpdateTime = time.Now()
-	insertSQL, insertArg := InsertAllSQL(simple, "crud_simple", "returning tid")
+	insertSQL, insertArg := InsertSQL(simple, "", "crud_simple", "returning tid")
 	fmt.Printf("insert\n")
 	fmt.Printf("   --->%v\n", insertSQL)
 	fmt.Printf("   --->%v\n", insertArg)
-	insertSQL1, insertArg1 := InsertSQL(simple, true, true, "", "update_time,create_time,status", "crud_simple", "returning tid")
+	insertSQL1, insertArg1 := InsertSQL(simple, "^update_time,create_time,status", "crud_simple", "returning tid")
 	fmt.Printf("insert\n")
 	fmt.Printf("   --->%v\n", insertSQL1)
 	fmt.Printf("   --->%v\n", insertArg1)
@@ -148,7 +133,7 @@ func AddSimple(simple *Simple) (err error) {
 		err = fmt.Errorf("error")
 		return
 	}
-	fileds, _, _ := InsertAllArgs(simple)
+	fileds, _, _ := InsertArgs(simple, "")
 	if len(fileds) < 1 {
 		err = fmt.Errorf("error")
 		return
@@ -163,7 +148,12 @@ func UpdateSimple(simple *Simple) (eff int, err error) {
 	var where []string
 	var args []interface{}
 
-	updateSQL, args = UpdateSQL(simple, true, true, "title,image,update_time,status", "", "crud_simple")
+	updateSQL, args = UpdateSQL(simple, "title,image,update_time,status", "crud_simple")
+
+	if strings.Contains(updateSQL, "tid") {
+		err = fmt.Errorf("error")
+		return
+	}
 
 	where, args = AppendWhere(where, args, simple.TID > 0, "tid=$%v", simple.TID)
 	where, args = AppendWhere(where, args, simple.UserID > 0, "user_id=$%v", simple.UserID)
@@ -173,23 +163,23 @@ func UpdateSimple(simple *Simple) (eff int, err error) {
 	fmt.Printf("   --->%v\n", updateSQL)
 	fmt.Printf("   --->%v\n", args)
 
-	updateSQL, args = UpdateAllSQL(simple, "crud_simple")
+	updateSQL, args = UpdateSQL(simple, "", "crud_simple")
 	fmt.Printf("update\n")
 	fmt.Printf("   --->%v\n", updateSQL)
 	fmt.Printf("   --->%v\n", args)
 
-	sets, args := UpdateAllArgs(simple)
+	sets, args := UpdateArgs(simple, "")
 	fmt.Printf("update\n")
 	fmt.Printf("   --->%v\n", sets)
 	fmt.Printf("   --->%v\n", args)
 	return
 }
 
-func LoadSimple(userID, simpleID int64) (simple *Simple, err error) {
-	simple = &Simple{}
+func LoadSimple(userID, simpleID int64) (err error) {
+	simple := &Simple{}
 	var where []string
 	var args []interface{}
-	querySQL := QueryAllSQL(simple, "crud_simple")
+	querySQL := QuerySQL(simple, "#nil,zero", "crud_simple")
 	where, args = AppendWhere(where, args, true, "user_id=$%v", userID)
 	where, args = AppendWhere(where, args, true, "tid=$%v", simpleID)
 	querySQL = JoinWhere(querySQL, where, "and")
@@ -197,9 +187,12 @@ func LoadSimple(userID, simpleID int64) (simple *Simple, err error) {
 	fmt.Printf("   --->%v\n", querySQL)
 	fmt.Printf("   --->%v\n", args)
 
-	fileds := QueryAllField(simple)
+	fileds := QueryField(simple, "#all")
 	fmt.Printf("query\n")
 	fmt.Printf("   --->%v\n", fileds)
+	if len(fileds) < 1 {
+		err = fmt.Errorf("fail")
+	}
 	return
 }
 
@@ -220,8 +213,8 @@ func ScanSimple() (err error) {
 	var userIDm0 map[int64]int64
 	var userIDm1 map[int64][]int64
 	var userIDx = UserIDx{}
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simpleList, &simple,
 		&userIDs0, "user_id",
@@ -238,6 +231,21 @@ func ScanSimple() (err error) {
 		},
 	)
 	if err != nil {
+		return
+	}
+	if len(simpleList) < 1 || simple == nil || len(userIDs0) < 1 || len(userIDs1) < 1 ||
+		len(images0) < 1 || len(images1) < 1 || len(simples0) < 1 || len(simples1) < 1 ||
+		len(userIDm0) < 1 || len(userIDm1) < 1 || len(userIDx) < 1 {
+		fmt.Printf(`
+			len(simpleList)=%v, simple=%v, len(userIDs0)=%v, len(userIDs1)=%v,
+			len(images0)=%v, len(images1)=%v, len(simples0)=%v, len(simples1)=%v,
+			len(userIDm0)=%v, len(userIDm1)=%v, len(userIDx)=%v
+			`,
+			len(simpleList), simple == nil, len(userIDs0), len(userIDs1),
+			len(images0), len(images1), len(simples0), len(simples1),
+			len(userIDm0), len(userIDm1), len(userIDx),
+		)
+		err = fmt.Errorf("data error")
 		return
 	}
 	data, _ := json.MarshalIndent(map[string]interface{}{
@@ -260,17 +268,17 @@ func ScanSimple() (err error) {
 
 func ScanError() (err error) {
 	rows, _ := (&PoolQueryer{}).Query("")
-	ScanAll(
-		rows, &Simple{},
+	Scan(
+		rows, &Simple{}, "#all",
 		func(v *Simple) {
 			// simples1[v.TID] = v
 		},
 	)
-	ScanAllArgs(&Simple{})
+	ScanArgs(&Simple{}, "#all")
 	//
 	var images []*string
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&images,
 	)
@@ -278,8 +286,8 @@ func ScanError() (err error) {
 		err = fmt.Errorf("not error")
 		return
 	}
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&images, 1,
 	)
@@ -287,8 +295,8 @@ func ScanError() (err error) {
 		err = fmt.Errorf("not error")
 		return
 	}
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&images, "",
 	)
@@ -296,8 +304,8 @@ func ScanError() (err error) {
 		err = fmt.Errorf("not error")
 		return
 	}
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&images, "not",
 	)
@@ -308,8 +316,8 @@ func ScanError() (err error) {
 
 	//
 	var simples map[int64]*Simple
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simples,
 	)
@@ -317,8 +325,8 @@ func ScanError() (err error) {
 		err = fmt.Errorf("not error")
 		return
 	}
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simples, 1,
 	)
@@ -326,8 +334,8 @@ func ScanError() (err error) {
 		err = fmt.Errorf("not error")
 		return
 	}
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simples, "",
 	)
@@ -335,8 +343,8 @@ func ScanError() (err error) {
 		err = fmt.Errorf("not error")
 		return
 	}
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simples, "not",
 	)
@@ -344,8 +352,8 @@ func ScanError() (err error) {
 		err = fmt.Errorf("not error")
 		return
 	}
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simples, "tid:not",
 	)
@@ -355,8 +363,8 @@ func ScanError() (err error) {
 	}
 
 	//
-	err = QueryAll(
-		&PoolQueryer{}, &Simple{},
+	err = Query(
+		&PoolQueryer{}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		1,
 	)
@@ -366,8 +374,8 @@ func ScanError() (err error) {
 	}
 
 	//
-	err = QueryAll(
-		&PoolQueryer{QueryErr: fmt.Errorf("xx")}, &Simple{},
+	err = Query(
+		&PoolQueryer{QueryErr: fmt.Errorf("xx")}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simples, "tid",
 	)
@@ -375,8 +383,8 @@ func ScanError() (err error) {
 		err = fmt.Errorf("not error")
 		return
 	}
-	err = QueryAll(
-		&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{},
+	err = Query(
+		&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simples, "tid",
 	)
@@ -389,7 +397,7 @@ func ScanError() (err error) {
 }
 
 func TestSimple(t *testing.T) {
-	//add material group
+	var err error
 	title := "test"
 	simple := &Simple{
 		UserID: 100,
@@ -405,10 +413,18 @@ func TestSimple(t *testing.T) {
 		Title:  &title,
 		Status: SimpleStatusNormal,
 	})
-	UpdateSimple(simple)
-	LoadSimple(simple.UserID, simple.TID)
+	_, err = UpdateSimple(simple)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = LoadSimple(simple.UserID, simple.TID)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 
-	err := ScanSimple()
+	err = ScanSimple()
 	if err != nil {
 		t.Error(err)
 		return

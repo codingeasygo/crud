@@ -1,3 +1,4 @@
+//Package crud is simple curd tools to process database
 package crud
 
 import (
@@ -6,28 +7,26 @@ import (
 	"strings"
 )
 
-func Join(v interface{}, sep, prefix, suffix string) string {
-	vtype := reflect.TypeOf(v)
-	if vtype.Kind() != reflect.Slice {
-		panic("not slice")
-	}
-	vval := reflect.ValueOf(v)
-	if vval.Len() < 1 {
-		return ""
-	}
-	val := fmt.Sprintf("%v", reflect.Indirect(vval.Index(0)).Interface())
-	for i := 1; i < vval.Len(); i++ {
-		val += fmt.Sprintf("%v%v", sep, reflect.Indirect(vval.Index(i)).Interface())
-	}
-	return prefix + val + suffix
-}
+var Tag = "json"
+var ArgFormat = "$%v"
 
-func FilterFieldCall(tag string, skipNil, skipZero bool, inc, exc string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
-	if len(inc) > 0 {
-		inc = "," + inc + ","
-	}
-	if len(exc) > 0 {
-		exc = "," + exc + ","
+func FilterFieldCall(tag, filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
+	var inc, exc string
+	var incNil, incZero bool
+	if len(filter) > 0 {
+		filter = strings.TrimSpace(filter)
+		parts := strings.SplitN(filter, "#", 2)
+		if len(parts[0]) > 0 {
+			if strings.HasPrefix(parts[0], "^") {
+				exc = "," + strings.TrimPrefix(parts[0], "^") + ","
+			} else {
+				inc = "," + parts[0] + ","
+			}
+		}
+		if len(parts) > 1 && len(parts[1]) > 0 {
+			incNil = strings.Contains(","+parts[1]+",", ",nil,") || strings.Contains(","+parts[1]+",", ",all,")
+			incZero = strings.Contains(","+parts[1]+",", ",zero,") || strings.Contains(","+parts[1]+",", ",all,")
+		}
 	}
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
@@ -47,26 +46,23 @@ func FilterFieldCall(tag string, skipNil, skipZero bool, inc, exc string, v inte
 		if len(exc) > 0 && strings.Contains(exc, ","+fieldName+",") {
 			continue
 		}
-		if fieldKind == reflect.Ptr && checkValue.IsNil() && skipNil {
+		if fieldKind == reflect.Ptr && checkValue.IsNil() && !incNil {
 			continue
 		}
 		if fieldKind == reflect.Ptr && !checkValue.IsNil() {
 			checkValue = reflect.Indirect(checkValue)
 		}
-		if checkValue.IsZero() && skipZero {
+		if checkValue.IsZero() && !incZero {
 			continue
 		}
 		call(fieldName, fieldType, fieldValue.Addr().Interface())
 	}
 }
 
-var Tag = "json"
-var ArgFormat = "$%v"
-
-func InsertArgs(v interface{}, skipNil, skipZero bool, inc, exc string) (fields, param string, args []interface{}) {
+func InsertArgs(v interface{}, filter string) (fields, param string, args []interface{}) {
 	fieldsList := []string{}
 	paramList := []string{}
-	FilterFieldCall(Tag, skipNil, skipZero, inc, exc, v, func(name string, field reflect.StructField, value interface{}) {
+	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
 		fieldsList = append(fieldsList, name)
 		args = append(args, value)
 		paramList = append(paramList, fmt.Sprintf(ArgFormat, len(args)))
@@ -76,25 +72,15 @@ func InsertArgs(v interface{}, skipNil, skipZero bool, inc, exc string) (fields,
 	return
 }
 
-func InsertSQL(v interface{}, skipNil, skipZero bool, inc, exc string, table string, suffix ...string) (sql string, args []interface{}) {
-	fields, param, args := InsertArgs(v, skipNil, skipZero, inc, exc)
+func InsertSQL(v interface{}, filter, table string, suffix ...string) (sql string, args []interface{}) {
+	fields, param, args := InsertArgs(v, filter)
 	sql = fmt.Sprintf(`insert into %v(%v) values(%v) %v`, table, fields, param, strings.Join(suffix, " "))
 	return
 }
 
-func InsertAllArgs(v interface{}) (fields, param string, args []interface{}) {
-	fields, param, args = InsertArgs(v, true, true, "", "")
-	return
-}
-
-func InsertAllSQL(v interface{}, table string, suffix ...string) (sql string, args []interface{}) {
-	sql, args = InsertSQL(v, true, true, "", "", table, suffix...)
-	return
-}
-
-func UpdateArgs(v interface{}, skipNil, skipZero bool, inc, exc string) (sets string, args []interface{}) {
+func UpdateArgs(v interface{}, filter string) (sets string, args []interface{}) {
 	fieldsList := []string{}
-	FilterFieldCall(Tag, skipNil, skipZero, inc, exc, v, func(name string, field reflect.StructField, value interface{}) {
+	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 		fieldsList = append(fieldsList, fmt.Sprintf("%v="+ArgFormat, name, len(args)))
 	})
@@ -102,25 +88,15 @@ func UpdateArgs(v interface{}, skipNil, skipZero bool, inc, exc string) (sets st
 	return
 }
 
-func UpdateAllArgs(v interface{}) (sets string, args []interface{}) {
-	sets, args = UpdateArgs(v, true, true, "", "")
-	return
-}
-
-func UpdateSQL(v interface{}, skipNil, skipZero bool, inc, exc string, table string, suffix ...string) (sql string, args []interface{}) {
-	sets, args := UpdateArgs(v, skipNil, skipZero, inc, exc)
+func UpdateSQL(v interface{}, filter string, table string, suffix ...string) (sql string, args []interface{}) {
+	sets, args := UpdateArgs(v, filter)
 	sql = fmt.Sprintf(`update %v set %v %v`, table, sets, strings.Join(suffix, " "))
 	return
 }
 
-func UpdateAllSQL(v interface{}, table string, suffix ...string) (sql string, args []interface{}) {
-	sql, args = UpdateSQL(v, true, true, "", "", table, suffix...)
-	return
-}
-
-func QueryField(v interface{}, skipNil, skipZero bool, inc, exc string) (fields string) {
+func QueryField(v interface{}, filter string) (fields string) {
 	fieldsList := []string{}
-	FilterFieldCall(Tag, skipNil, skipZero, inc, exc, v, func(name string, field reflect.StructField, value interface{}) {
+	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
 		conv := field.Tag.Get("conv")
 		fieldsList = append(fieldsList, fmt.Sprintf("%v%v", name, conv))
 	})
@@ -128,19 +104,9 @@ func QueryField(v interface{}, skipNil, skipZero bool, inc, exc string) (fields 
 	return
 }
 
-func QuerySQL(v interface{}, skipNil, skipZero bool, inc, exc string, table string, suffix ...string) (sql string) {
-	fields := QueryField(v, skipNil, skipNil, inc, exc)
+func QuerySQL(v interface{}, filter, table string, suffix ...string) (sql string) {
+	fields := QueryField(v, filter)
 	sql = fmt.Sprintf(`select %v from %v %v`, fields, table, strings.Join(suffix, " "))
-	return
-}
-
-func QueryAllField(v interface{}) (fields string) {
-	fields = QueryField(v, false, false, "", "")
-	return
-}
-
-func QueryAllSQL(v interface{}, table string, suffix ...string) (sql string) {
-	sql = QuerySQL(v, false, false, "", "", table, suffix...)
 	return
 }
 
@@ -161,15 +127,10 @@ func JoinWhere(sql string, where []string, sep string, suffix ...string) (sql_ s
 	return
 }
 
-func ScanArgs(v interface{}, skipNil, skipZero bool, inc, exc string) (args []interface{}) {
-	FilterFieldCall(Tag, skipNil, skipZero, inc, exc, v, func(name string, field reflect.StructField, value interface{}) {
+func ScanArgs(v interface{}, filter string) (args []interface{}) {
+	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 	})
-	return
-}
-
-func ScanAllArgs(v interface{}) (args []interface{}) {
-	args = ScanArgs(v, false, false, "", "")
 	return
 }
 
@@ -297,12 +258,12 @@ func destSet(value reflect.Value, dests ...interface{}) (err error) {
 	return
 }
 
-func Scan(rows Rows, v interface{}, skipNil, skipZero bool, inc, exc string, dest ...interface{}) (err error) {
+func Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	for rows.Next() {
 		value := reflect.New(reflectType)
-		err = rows.Scan(ScanArgs(value.Interface(), skipNil, skipZero, inc, exc)...)
+		err = rows.Scan(ScanArgs(value.Interface(), filter)...)
 		if err != nil {
 			break
 		}
@@ -314,22 +275,12 @@ func Scan(rows Rows, v interface{}, skipNil, skipZero bool, inc, exc string, des
 	return
 }
 
-func ScanAll(rows Rows, v interface{}, dest ...interface{}) (err error) {
-	err = Scan(rows, v, false, false, "", "", dest...)
-	return
-}
-
-func Query(queryer Queryer, v interface{}, skipNil, skipZero bool, inc, exc string, sql string, args []interface{}, dest ...interface{}) (err error) {
+func Query(queryer Queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
 	rows, err := queryer.Query(sql, args...)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
-	err = Scan(rows, v, skipNil, skipZero, inc, exc, dest...)
-	return
-}
-
-func QueryAll(queryer Queryer, v interface{}, sql string, args []interface{}, dest ...interface{}) (err error) {
-	err = Query(queryer, v, false, false, "", "", sql, args, dest...)
+	err = Scan(rows, v, filter, dest...)
 	return
 }
