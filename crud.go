@@ -113,7 +113,7 @@ func JoinWhere(sql string, where []string, sep string, suffix ...string) (sql_ s
 func JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
 	sql_ = sql
 	if offset >= 0 || limit > 0 {
-		sql_ += orderby
+		sql_ += " " + orderby + " "
 	}
 	if offset >= 0 {
 		sql_ += fmt.Sprintf(" offset %v ", offset)
