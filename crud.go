@@ -110,6 +110,20 @@ func JoinWhere(sql string, where []string, sep string, suffix ...string) (sql_ s
 	return
 }
 
+func JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
+	sql_ = sql
+	if offset >= 0 || limit > 0 {
+		sql_ += orderby
+	}
+	if offset >= 0 {
+		sql_ += fmt.Sprintf(" offset %v ", offset)
+	}
+	if limit > 0 {
+		sql_ += fmt.Sprintf(" limit %v ", limit)
+	}
+	return
+}
+
 func InsertArgs(v interface{}, filter string) (fields, param []string, args []interface{}) {
 	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
