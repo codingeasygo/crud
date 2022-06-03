@@ -15,7 +15,7 @@ func FilterFieldCall(tag, filter string, v interface{}, call func(name string, f
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	if reflectType.Kind() != reflect.Struct {
-		call("", reflect.StructField{}, v)
+		call(filter, reflect.StructField{}, v)
 		return
 	}
 	var inc, exc string
