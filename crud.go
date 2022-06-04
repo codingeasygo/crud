@@ -102,6 +102,19 @@ func AppendWhere(where []string, args []interface{}, ok bool, formats ...interfa
 	return
 }
 
+func AppendWhereN(where []string, args []interface{}, ok bool, format string, n int, v interface{}) (where_ []string, args_ []interface{}) {
+	where_, args_ = where, args
+	if ok {
+		args_ = append(args_, v)
+		fargs := []interface{}{}
+		for i := 0; i < n; i++ {
+			fargs = append(fargs, fmt.Sprintf("%v", len(args_)))
+		}
+		where_ = append(where_, fmt.Sprintf(format, fargs...))
+	}
+	return
+}
+
 func JoinWhere(sql string, where []string, sep string, suffix ...string) (sql_ string) {
 	sql_ = sql
 	if len(where) > 0 {
