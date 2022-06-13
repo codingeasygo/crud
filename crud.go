@@ -424,13 +424,20 @@ func (c *CRUD) Scan(rows Rows, v interface{}, filter string, dest ...interface{}
 	return
 }
 
-func Query(queryer Queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+func Query(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
 	err = Default.Query(queryer, v, filter, sql, args, dest...)
 	return
 }
 
-func (c *CRUD) Query(queryer Queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	rows, err := queryer.Query(sql, args...)
+func (c *CRUD) Query(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	var rows Rows
+	if q, ok := queryer.(Queryer); ok {
+		rows, err = q.Query(sql, args...)
+	} else if q, ok := queryer.(CrudQueryer); ok {
+		rows, err = q.CrudQuery(sql, args...)
+	} else {
+		panic("queryer is not supported")
+	}
 	if err != nil {
 		return
 	}
@@ -467,13 +474,20 @@ func (c *CRUD) ScanRow(rows Rows, v interface{}, filter string, dest ...interfac
 	return
 }
 
-func QueryRow(queryer Queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+func QueryRow(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
 	err = Default.QueryRow(queryer, v, filter, sql, args, dest...)
 	return
 }
 
-func (c *CRUD) QueryRow(queryer Queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	rows, err := queryer.Query(sql, args...)
+func (c *CRUD) QueryRow(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	var rows Rows
+	if q, ok := queryer.(Queryer); ok {
+		rows, err = q.Query(sql, args...)
+	} else if q, ok := queryer.(CrudQueryer); ok {
+		rows, err = q.CrudQuery(sql, args...)
+	} else {
+		panic("queryer is not supported")
+	}
 	if err != nil {
 		return
 	}

@@ -13,3 +13,7 @@ type Rows interface {
 type Queryer interface {
 	Query(sql string, args ...interface{}) (rows Rows, err error)
 }
+
+type CrudQueryer interface {
+	CrudQuery(sql string, args ...interface{}) (rows Rows, err error)
+}

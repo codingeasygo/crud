@@ -90,6 +90,15 @@ func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err err
 	return
 }
 
+type PoolCrudQueryer struct {
+	Queryer *PoolQueryer
+}
+
+func (p *PoolCrudQueryer) CrudQuery(sql string, args ...interface{}) (rows Rows, err error) {
+	rows, err = p.Queryer.Query(sql, args...)
+	return
+}
+
 type TestRows struct {
 	Values [][]interface{}
 	Index  int
@@ -326,7 +335,7 @@ func ScanSimple() (err error) {
 	var testIDs0 []int64
 	var testIDs1 int64
 	err = Query(
-		&PoolQueryer{}, int64(0), "",
+		&PoolCrudQueryer{Queryer: &PoolQueryer{}}, int64(0), "",
 		"int64", []interface{}{"arg"},
 		&testIDs0,
 	)
@@ -335,7 +344,7 @@ func ScanSimple() (err error) {
 		return
 	}
 	err = QueryRow(
-		&PoolQueryer{}, int64(0), "",
+		&PoolCrudQueryer{Queryer: &PoolQueryer{}}, int64(0), "",
 		"int64", []interface{}{"arg"},
 		&testIDs1,
 	)
@@ -514,6 +523,26 @@ func ScanError() (err error) {
 		err = fmt.Errorf("not error")
 		return
 	}
+	func() {
+		defer func() {
+			recover()
+		}()
+		Query(
+			"xxx", &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples, "tid",
+		)
+	}()
+	func() {
+		defer func() {
+			recover()
+		}()
+		QueryRow(
+			"xxx", &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples, "tid",
+		)
+	}()
 	err = nil
 	return
 }
