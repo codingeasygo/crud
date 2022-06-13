@@ -212,8 +212,8 @@ func (g *Gen) Generate(writer io.Writer, call func(buffer io.Writer, data interf
 	return
 }
 
-func (g *Gen) GenerateByTemplate(tmpl string, writer io.Writer) (err error) {
-	structTmpl := template.New("struct")
+func (g *Gen) GenerateByTemplate(name, tmpl string, writer io.Writer) (err error) {
+	structTmpl := template.New(name)
 	structTmpl.Funcs(template.FuncMap{
 		"JoinOption": g.JoinOption,
 	})
