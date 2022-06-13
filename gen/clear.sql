@@ -1,0 +1,3 @@
+ALTER TABLE IF EXISTS crud_simple ALTER COLUMN tid DROP DEFAULT;
+DROP SEQUENCE IF EXISTS crud_simple_tid_seq;
+DROP TABLE IF EXISTS crud_simple;
