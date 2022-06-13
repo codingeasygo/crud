@@ -129,7 +129,7 @@ type Gen struct {
 	NameConv   NameConv
 	TypeConv   TypeConv
 	OptionConv OptionConv
-	OnPre      func(*Table) interface{}
+	OnPre      func(*Gen, *Table) interface{}
 }
 
 func NewGen(typeMap map[string][]string, tables []*Table) (gen *Gen) {
@@ -166,7 +166,7 @@ func (g *Gen) AsStruct(t *Table) (s *Struct) {
 
 func (g *Gen) convStruct(t *Table) (data interface{}) {
 	if g.OnPre != nil {
-		data = g.OnPre(t)
+		data = g.OnPre(g, t)
 	} else {
 		data = map[string]interface{}{
 			"Struct": g.AsStruct(t),
