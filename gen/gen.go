@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/format"
 	"io"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -20,7 +21,8 @@ func ConvCamelCase(isTable bool, name string) (result string) {
 }
 
 func ConvSizeTrim(typeMap map[string][]string, s *Struct, column *Column) (result string) {
-	types := typeMap[strings.ToLower(strings.SplitN(column.Type, "(", 2)[0])]
+	typ := regexp.MustCompile(`\([^\)]*\)`).ReplaceAllString(column.Type, "")
+	types := typeMap[strings.ToLower(typ)]
 	if len(types) < 1 {
 		types = typeMap["*"]
 	}
