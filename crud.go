@@ -7,11 +7,26 @@ import (
 	"strings"
 )
 
-var Tag = "json"
-var ArgFormat = "$%v"
-var ErrNoRows = fmt.Errorf("no rows")
+var Default = &CRUD{
+	Tag:       "json",
+	ArgFormat: "$%v",
+	ErrNoRows: fmt.Errorf("no rows"),
+}
 
-func FilterFieldCall(tag, filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
+type NameConv func(name string, field reflect.StructField) string
+
+type CRUD struct {
+	Tag       string
+	ArgFormat string
+	ErrNoRows error
+	NameConv  NameConv
+}
+
+func FilterFieldCall(filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
+	Default.FilterFieldCall(filter, v, call)
+}
+
+func (c *CRUD) FilterFieldCall(filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	if reflectType.Kind() != reflect.Struct {
@@ -39,7 +54,7 @@ func FilterFieldCall(tag, filter string, v interface{}, call func(name string, f
 	for i := 0; i < numField; i++ {
 		fieldValue := reflectValue.Field(i)
 		fieldType := reflectType.Field(i)
-		fieldName := fieldType.Tag.Get(tag)
+		fieldName := fieldType.Tag.Get(c.Tag)
 		fieldKind := fieldValue.Kind()
 		checkValue := fieldValue
 		if len(fieldName) < 1 || fieldName == "-" {
@@ -60,11 +75,19 @@ func FilterFieldCall(tag, filter string, v interface{}, call func(name string, f
 		if checkValue.IsZero() && !incZero {
 			continue
 		}
+		if c.NameConv != nil {
+			fieldName = c.NameConv(fieldName, fieldType)
+		}
 		call(fieldName, fieldType, fieldValue.Addr().Interface())
 	}
 }
 
 func AppendInsert(fields, param []string, args []interface{}, ok bool, formats ...interface{}) (fields_, param_ []string, args_ []interface{}) {
+	fields_, param_, args_ = Default.AppendInsert(fields, param, args, ok, formats...)
+	return
+}
+
+func (c *CRUD) AppendInsert(fields, param []string, args []interface{}, ok bool, formats ...interface{}) (fields_, param_ []string, args_ []interface{}) {
 	fields_, param_, args_ = fields, param, args
 	if ok {
 		n := len(formats) / 2
@@ -79,6 +102,11 @@ func AppendInsert(fields, param []string, args []interface{}, ok bool, formats .
 }
 
 func AppendSet(sets []string, args []interface{}, ok bool, formats ...interface{}) (sets_ []string, args_ []interface{}) {
+	sets_, args_ = Default.AppendSet(sets, args, ok, formats...)
+	return
+}
+
+func (c *CRUD) AppendSet(sets []string, args []interface{}, ok bool, formats ...interface{}) (sets_ []string, args_ []interface{}) {
 	sets_, args_ = sets, args
 	if ok {
 		n := len(formats) / 2
@@ -91,6 +119,11 @@ func AppendSet(sets []string, args []interface{}, ok bool, formats ...interface{
 }
 
 func AppendWhere(where []string, args []interface{}, ok bool, formats ...interface{}) (where_ []string, args_ []interface{}) {
+	where_, args_ = Default.AppendWhere(where, args, ok, formats...)
+	return
+}
+
+func (c *CRUD) AppendWhere(where []string, args []interface{}, ok bool, formats ...interface{}) (where_ []string, args_ []interface{}) {
 	where_, args_ = where, args
 	if ok {
 		n := len(formats) / 2
@@ -103,6 +136,11 @@ func AppendWhere(where []string, args []interface{}, ok bool, formats ...interfa
 }
 
 func AppendWhereN(where []string, args []interface{}, ok bool, format string, n int, v interface{}) (where_ []string, args_ []interface{}) {
+	where_, args_ = Default.AppendWhereN(where, args, ok, format, n, v)
+	return
+}
+
+func (c *CRUD) AppendWhereN(where []string, args []interface{}, ok bool, format string, n int, v interface{}) (where_ []string, args_ []interface{}) {
 	where_, args_ = where, args
 	if ok {
 		args_ = append(args_, v)
@@ -116,6 +154,11 @@ func AppendWhereN(where []string, args []interface{}, ok bool, format string, n 
 }
 
 func JoinWhere(sql string, where []string, sep string, suffix ...string) (sql_ string) {
+	sql_ = Default.JoinWhere(sql, where, sep, suffix...)
+	return
+}
+
+func (c *CRUD) JoinWhere(sql string, where []string, sep string, suffix ...string) (sql_ string) {
 	sql_ = sql
 	if len(where) > 0 {
 		sql_ += " where " + strings.Join(where, " "+sep+" ") + " " + strings.Join(suffix, " ")
@@ -124,6 +167,11 @@ func JoinWhere(sql string, where []string, sep string, suffix ...string) (sql_ s
 }
 
 func JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
+	sql_ = Default.JoinPage(sql, orderby, offset, limit)
+	return
+}
+
+func (c *CRUD) JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
 	sql_ = sql
 	if offset >= 0 || limit > 0 {
 		sql_ += " " + orderby + " "
@@ -138,37 +186,62 @@ func JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
 }
 
 func InsertArgs(v interface{}, filter string) (fields, param []string, args []interface{}) {
-	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
+	fields, param, args = Default.InsertArgs(v, filter)
+	return
+}
+
+func (c *CRUD) InsertArgs(v interface{}, filter string) (fields, param []string, args []interface{}) {
+	c.FilterFieldCall(filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 		fields = append(fields, name)
-		param = append(param, fmt.Sprintf(ArgFormat, len(args)))
+		param = append(param, fmt.Sprintf(c.ArgFormat, len(args)))
 	})
 	return
 }
 
 func InsertSQL(v interface{}, filter, table string, suffix ...string) (sql string, args []interface{}) {
-	fields, param, args := InsertArgs(v, filter)
+	sql, args = Default.InsertSQL(v, filter, table, suffix...)
+	return
+}
+
+func (c *CRUD) InsertSQL(v interface{}, filter, table string, suffix ...string) (sql string, args []interface{}) {
+	fields, param, args := c.InsertArgs(v, filter)
 	sql = fmt.Sprintf(`insert into %v(%v) values(%v) %v`, table, strings.Join(fields, ","), strings.Join(param, ","), strings.Join(suffix, " "))
 	return
 }
 
 func UpdateArgs(v interface{}, filter string) (sets []string, args []interface{}) {
-	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
+	sets, args = Default.UpdateArgs(v, filter)
+	return
+}
+
+func (c *CRUD) UpdateArgs(v interface{}, filter string) (sets []string, args []interface{}) {
+	c.FilterFieldCall(filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
-		sets = append(sets, fmt.Sprintf("%v="+ArgFormat, name, len(args)))
+		sets = append(sets, fmt.Sprintf("%v="+c.ArgFormat, name, len(args)))
 	})
 	return
 }
 
 func UpdateSQL(v interface{}, filter string, table string, suffix ...string) (sql string, args []interface{}) {
-	sets, args := UpdateArgs(v, filter)
+	sql, args = Default.UpdateSQL(v, filter, table, suffix...)
+	return
+}
+
+func (c *CRUD) UpdateSQL(v interface{}, filter string, table string, suffix ...string) (sql string, args []interface{}) {
+	sets, args := c.UpdateArgs(v, filter)
 	sql = fmt.Sprintf(`update %v set %v %v`, table, strings.Join(sets, ","), strings.Join(suffix, " "))
 	return
 }
 
 func QueryField(v interface{}, filter string) (fields string) {
+	fields = Default.QueryField(v, filter)
+	return
+}
+
+func (c *CRUD) QueryField(v interface{}, filter string) (fields string) {
 	fieldsList := []string{}
-	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
+	c.FilterFieldCall(filter, v, func(name string, field reflect.StructField, value interface{}) {
 		conv := field.Tag.Get("conv")
 		fieldsList = append(fieldsList, fmt.Sprintf("%v%v", name, conv))
 	})
@@ -177,26 +250,36 @@ func QueryField(v interface{}, filter string) (fields string) {
 }
 
 func QuerySQL(v interface{}, filter, table string, suffix ...string) (sql string) {
-	fields := QueryField(v, filter)
+	sql = Default.QuerySQL(v, filter, table, suffix...)
+	return
+}
+
+func (c *CRUD) QuerySQL(v interface{}, filter, table string, suffix ...string) (sql string) {
+	fields := c.QueryField(v, filter)
 	sql = fmt.Sprintf(`select %v from %v %v`, fields, table, strings.Join(suffix, " "))
 	return
 }
 
 func ScanArgs(v interface{}, filter string) (args []interface{}) {
-	FilterFieldCall(Tag, filter, v, func(name string, field reflect.StructField, value interface{}) {
+	args = Default.ScanArgs(v, filter)
+	return
+}
+
+func (c *CRUD) ScanArgs(v interface{}, filter string) (args []interface{}) {
+	c.FilterFieldCall(filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 	})
 	return
 }
 
-func destSet(value reflect.Value, dests ...interface{}) (err error) {
+func (c *CRUD) destSet(value reflect.Value, dests ...interface{}) (err error) {
 	valueField := func(key string) (v reflect.Value, e error) {
 		targetValue := reflect.Indirect(value)
 		targetType := targetValue.Type()
 		k := targetValue.NumField()
 		for i := 0; i < k; i++ {
 			field := targetType.Field(i)
-			fieldName := field.Tag.Get(Tag)
+			fieldName := field.Tag.Get(c.Tag)
 			if fieldName == key {
 				v = targetValue.Field(i)
 				return
@@ -316,19 +399,24 @@ func destSet(value reflect.Value, dests ...interface{}) (err error) {
 }
 
 func Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
+	err = Default.Scan(rows, v, filter, dest...)
+	return
+}
+
+func (c *CRUD) Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
 	isPtr := reflect.ValueOf(v).Kind() == reflect.Ptr
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	for rows.Next() {
 		value := reflect.New(reflectType)
-		err = rows.Scan(ScanArgs(value.Interface(), filter)...)
+		err = rows.Scan(c.ScanArgs(value.Interface(), filter)...)
 		if err != nil {
 			break
 		}
 		if !isPtr {
 			value = reflect.Indirect(value)
 		}
-		err = destSet(value, dest...)
+		err = c.destSet(value, dest...)
 		if err != nil {
 			break
 		}
@@ -337,32 +425,42 @@ func Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err err
 }
 
 func Query(queryer Queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.Query(queryer, v, filter, sql, args, dest...)
+	return
+}
+
+func (c *CRUD) Query(queryer Queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
 	rows, err := queryer.Query(sql, args...)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
-	err = Scan(rows, v, filter, dest...)
+	err = c.Scan(rows, v, filter, dest...)
 	return
 }
 
 func ScanRow(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
+	err = Default.ScanRow(rows, v, filter, dest...)
+	return
+}
+
+func (c *CRUD) ScanRow(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
 	isPtr := reflect.ValueOf(v).Kind() == reflect.Ptr
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	if !rows.Next() {
-		err = ErrNoRows
+		err = c.ErrNoRows
 		return
 	}
 	value := reflect.New(reflectType)
-	err = rows.Scan(ScanArgs(value.Interface(), filter)...)
+	err = rows.Scan(c.ScanArgs(value.Interface(), filter)...)
 	if err != nil {
 		return
 	}
 	if !isPtr {
 		value = reflect.Indirect(value)
 	}
-	err = destSet(value, dest...)
+	err = c.destSet(value, dest...)
 	if err != nil {
 		return
 	}
@@ -370,11 +468,16 @@ func ScanRow(rows Rows, v interface{}, filter string, dest ...interface{}) (err 
 }
 
 func QueryRow(queryer Queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.QueryRow(queryer, v, filter, sql, args, dest...)
+	return
+}
+
+func (c *CRUD) QueryRow(queryer Queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
 	rows, err := queryer.Query(sql, args...)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
-	err = ScanRow(rows, v, filter, dest...)
+	err = c.ScanRow(rows, v, filter, dest...)
 	return
 }

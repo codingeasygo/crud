@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+func init() {
+	Default.NameConv = func(name string, field reflect.StructField) string {
+		return name
+	}
+}
+
 func JSON(v interface{}) string {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -219,6 +225,28 @@ func LoadSimple(userID, simpleID int64) (err error) {
 	return
 }
 
+func SearchSimple(userID int64, key string) (err error) {
+	simple := &Simple{}
+	var where []string
+	var args []interface{}
+	querySQL := QuerySQL(simple, "#nil,zero", "crud_simple")
+	where, args = AppendWhere(where, args, true, "user_id=$%v", userID)
+	where, args = AppendWhereN(where, args, true, "(title like $%v or data like $%v)", 2, "%"+key+"%")
+	querySQL = JoinWhere(querySQL, where, "and")
+	querySQL = JoinPage(querySQL, "order by tid", 0, 10)
+	fmt.Printf("query\n")
+	fmt.Printf("   --->%v\n", querySQL)
+	fmt.Printf("   --->%v\n", args)
+
+	fileds := QueryField(simple, "#all")
+	fmt.Printf("query\n")
+	fmt.Printf("   --->%v\n", fileds)
+	if len(fileds) < 1 {
+		err = fmt.Errorf("fail")
+	}
+	return
+}
+
 type UserIDx map[int64]string
 
 func (u UserIDx) Scan(v interface{}) {
@@ -322,6 +350,12 @@ func ScanSimple() (err error) {
 func ScanError() (err error) {
 	rows, _ := (&PoolQueryer{}).Query("")
 	Scan(
+		rows, &Simple{}, "#all",
+		func(v *Simple) {
+			// simples1[v.TID] = v
+		},
+	)
+	ScanRow(
 		rows, &Simple{}, "#all",
 		func(v *Simple) {
 			// simples1[v.TID] = v
@@ -494,6 +528,8 @@ func TestSimple(t *testing.T) {
 		Image:  &title,
 		Status: SimpleStatusNormal,
 	}
+	FilterFieldCall("#all", simple, func(name string, field reflect.StructField, value interface{}) {
+	})
 	AddSimple(simple)
 	AddSimple(&Simple{
 		UserID: 0,
@@ -501,12 +537,20 @@ func TestSimple(t *testing.T) {
 		Title:  &title,
 		Status: SimpleStatusNormal,
 	})
+
 	_, err = UpdateSimple(simple)
 	if err != nil {
 		t.Error(err)
 		return
 	}
+
 	err = LoadSimple(simple.UserID, simple.TID)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	err = SearchSimple(simple.UserID, "t")
 	if err != nil {
 		t.Error(err)
 		return
