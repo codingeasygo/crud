@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	Default.NameConv = func(name string, field reflect.StructField) string {
+	Default.NameConv = func(on, name string, field reflect.StructField) string {
 		return name
 	}
 }
@@ -557,7 +557,7 @@ func TestSimple(t *testing.T) {
 		Image:  &title,
 		Status: SimpleStatusNormal,
 	}
-	FilterFieldCall("#all", simple, func(name string, field reflect.StructField, value interface{}) {
+	FilterFieldCall("test", "#all", simple, func(name string, field reflect.StructField, value interface{}) {
 	})
 	AddSimple(simple)
 	AddSimple(&Simple{

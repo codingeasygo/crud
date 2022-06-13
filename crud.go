@@ -13,7 +13,7 @@ var Default = &CRUD{
 	ErrNoRows: fmt.Errorf("no rows"),
 }
 
-type NameConv func(name string, field reflect.StructField) string
+type NameConv func(on, name string, field reflect.StructField) string
 
 type CRUD struct {
 	Tag       string
@@ -22,11 +22,11 @@ type CRUD struct {
 	NameConv  NameConv
 }
 
-func FilterFieldCall(filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
-	Default.FilterFieldCall(filter, v, call)
+func FilterFieldCall(on, filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
+	Default.FilterFieldCall(on, filter, v, call)
 }
 
-func (c *CRUD) FilterFieldCall(filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
+func (c *CRUD) FilterFieldCall(on, filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	if reflectType.Kind() != reflect.Struct {
@@ -76,7 +76,7 @@ func (c *CRUD) FilterFieldCall(filter string, v interface{}, call func(name stri
 			continue
 		}
 		if c.NameConv != nil {
-			fieldName = c.NameConv(fieldName, fieldType)
+			fieldName = c.NameConv(on, fieldName, fieldType)
 		}
 		call(fieldName, fieldType, fieldValue.Addr().Interface())
 	}
@@ -191,7 +191,7 @@ func InsertArgs(v interface{}, filter string) (fields, param []string, args []in
 }
 
 func (c *CRUD) InsertArgs(v interface{}, filter string) (fields, param []string, args []interface{}) {
-	c.FilterFieldCall(filter, v, func(name string, field reflect.StructField, value interface{}) {
+	c.FilterFieldCall("insert", filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 		fields = append(fields, name)
 		param = append(param, fmt.Sprintf(c.ArgFormat, len(args)))
@@ -216,7 +216,7 @@ func UpdateArgs(v interface{}, filter string) (sets []string, args []interface{}
 }
 
 func (c *CRUD) UpdateArgs(v interface{}, filter string) (sets []string, args []interface{}) {
-	c.FilterFieldCall(filter, v, func(name string, field reflect.StructField, value interface{}) {
+	c.FilterFieldCall("update", filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 		sets = append(sets, fmt.Sprintf("%v="+c.ArgFormat, name, len(args)))
 	})
@@ -241,7 +241,7 @@ func QueryField(v interface{}, filter string) (fields string) {
 
 func (c *CRUD) QueryField(v interface{}, filter string) (fields string) {
 	fieldsList := []string{}
-	c.FilterFieldCall(filter, v, func(name string, field reflect.StructField, value interface{}) {
+	c.FilterFieldCall("query", filter, v, func(name string, field reflect.StructField, value interface{}) {
 		conv := field.Tag.Get("conv")
 		fieldsList = append(fieldsList, fmt.Sprintf("%v%v", name, conv))
 	})
@@ -266,7 +266,7 @@ func ScanArgs(v interface{}, filter string) (args []interface{}) {
 }
 
 func (c *CRUD) ScanArgs(v interface{}, filter string) (args []interface{}) {
-	c.FilterFieldCall(filter, v, func(name string, field reflect.StructField, value interface{}) {
+	c.FilterFieldCall("scan", filter, v, func(name string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 	})
 	return
