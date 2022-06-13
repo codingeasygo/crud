@@ -45,6 +45,9 @@ func ConvKeyValueOption(s *Struct, field *Field) (result []*Option) {
 		key := strings.Trim(strings.TrimSpace(kv[0]), `"`)
 		val := strings.Trim(strings.TrimSpace(kv[1]), `"`)
 		comment := ""
+		if field.Type == "string" {
+			val = fmt.Sprintf(`"%v"`, val)
+		}
 		if len(parts) > 1 {
 			comment = strings.TrimSpace(parts[1])
 		}
