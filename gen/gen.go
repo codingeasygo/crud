@@ -201,6 +201,7 @@ func (g *Gen) Generate(writer io.Writer, call func(buffer io.Writer, data interf
 		}
 		source, err = format.Source(buffer.Bytes())
 		if err != nil {
+			err = fmt.Errorf("format source fail with %v by \n%v", err, buffer.String())
 			break
 		}
 		source = []byte("\n" + strings.TrimSpace(string(source)) + "\n")
