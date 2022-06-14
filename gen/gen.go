@@ -126,6 +126,7 @@ type Struct struct {
 type Gen struct {
 	Tables     []*Table
 	TypeMap    map[string][]string
+	FuncMap    template.FuncMap
 	NameConv   NameConv
 	TypeConv   TypeConv
 	OptionConv OptionConv
@@ -136,11 +137,13 @@ func NewGen(typeMap map[string][]string, tables []*Table) (gen *Gen) {
 	gen = &Gen{
 		Tables:     tables,
 		TypeMap:    typeMap,
+		FuncMap:    template.FuncMap{},
 		NameConv:   ConvCamelCase,
 		TypeConv:   ConvSizeTrim,
 		OptionConv: ConvKeyValueOption,
 		OnPre:      nil,
 	}
+	gen.FuncMap["JoinOption"] = gen.JoinOption
 	return
 }
 
@@ -214,14 +217,10 @@ func (g *Gen) Generate(writer io.Writer, call func(buffer io.Writer, data interf
 }
 
 func (g *Gen) GenerateByTemplate(name, tmpl string, writer io.Writer) (err error) {
-	structTmpl := template.New(name)
-	structTmpl.Funcs(template.FuncMap{
-		"JoinOption": g.JoinOption,
-	})
+	structTmpl := template.New(name).Funcs(g.FuncMap)
 	_, err = structTmpl.Parse(tmpl)
-	if err != nil {
-		return
+	if err == nil {
+		err = g.Generate(writer, structTmpl.Execute)
 	}
-	err = g.Generate(writer, structTmpl.Execute)
 	return
 }
