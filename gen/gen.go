@@ -81,7 +81,7 @@ type Table struct {
 	Columns []*Column `json:"columns"`
 }
 
-func Query(queryer crud.Queryer, tableSQL, columnSQL, schema string) (tables []*Table, err error) {
+func Query(queryer interface{}, tableSQL, columnSQL, schema string) (tables []*Table, err error) {
 	err = crud.Query(queryer, &Table{}, "name,type,comment#all", tableSQL, []interface{}{schema}, &tables)
 	if err != nil {
 		return
