@@ -221,6 +221,6 @@ func (g *Gen) GenerateByTemplate(name, tmpl string, writer io.Writer) (err error
 	if err != nil {
 		return
 	}
-	err = g.Generate(writer, structTmpl.Execute)
+	g.Generate(writer, structTmpl.Execute)
 	return
 }
