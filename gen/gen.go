@@ -147,6 +147,12 @@ func NewGen(typeMap map[string][]string, tables []*Table) (gen *Gen) {
 	return
 }
 
+func (g *Gen) Funcs(funcs template.FuncMap) {
+	for k, v := range funcs {
+		g.FuncMap[k] = v
+	}
+}
+
 func (g *Gen) AsStruct(t *Table) (s *Struct) {
 	s = &Struct{
 		Name:    g.NameConv(true, t.Name),
