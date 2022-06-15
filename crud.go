@@ -11,14 +11,18 @@ var Default = &CRUD{
 	Tag:       "json",
 	ArgFormat: "$%v",
 	ErrNoRows: fmt.Errorf("no rows"),
+	Log:       func(format string, args ...interface{}) { fmt.Printf(format+"\n", args...) },
 }
 
 type NameConv func(on, name string, field reflect.StructField) string
+type LogF func(format string, args ...interface{})
 
 type CRUD struct {
 	Tag       string
 	ArgFormat string
 	ErrNoRows error
+	Verbose   bool
+	Log       LogF
 	NameConv  NameConv
 }
 
@@ -163,6 +167,9 @@ func (c *CRUD) JoinWhere(sql string, where []string, sep string, suffix ...strin
 	if len(where) > 0 {
 		sql_ += " where " + strings.Join(where, " "+sep+" ") + " " + strings.Join(suffix, " ")
 	}
+	if c.Verbose {
+		c.Log("CRUD join where done with sql:%v", sql_)
+	}
 	return
 }
 
@@ -182,6 +189,9 @@ func (c *CRUD) JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
 	if limit > 0 {
 		sql_ += fmt.Sprintf(" limit %v ", limit)
 	}
+	if c.Verbose {
+		c.Log("CRUD join page doen with sql:%v", sql_)
+	}
 	return
 }
 
@@ -196,6 +206,9 @@ func (c *CRUD) InsertArgs(v interface{}, filter string) (fields, param []string,
 		fields = append(fields, name)
 		param = append(param, fmt.Sprintf(c.ArgFormat, len(args)))
 	})
+	if c.Verbose {
+		c.Log("CRUD generate insert args by struct:%v,filter:%v, result is fields:%v,param:%v", reflect.TypeOf(v), filter, fields, param)
+	}
 	return
 }
 
@@ -207,6 +220,9 @@ func InsertSQL(v interface{}, filter, table string, suffix ...string) (sql strin
 func (c *CRUD) InsertSQL(v interface{}, filter, table string, suffix ...string) (sql string, args []interface{}) {
 	fields, param, args := c.InsertArgs(v, filter)
 	sql = fmt.Sprintf(`insert into %v(%v) values(%v) %v`, table, strings.Join(fields, ","), strings.Join(param, ","), strings.Join(suffix, " "))
+	if c.Verbose {
+		c.Log("CRUD generate insert sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
+	}
 	return
 }
 
@@ -220,6 +236,9 @@ func (c *CRUD) UpdateArgs(v interface{}, filter string) (sets []string, args []i
 		args = append(args, value)
 		sets = append(sets, fmt.Sprintf("%v="+c.ArgFormat, name, len(args)))
 	})
+	if c.Verbose {
+		c.Log("CRUD generate update args by struct:%v,filter:%v, result is sets:%v", reflect.TypeOf(v), filter, sets)
+	}
 	return
 }
 
@@ -231,6 +250,9 @@ func UpdateSQL(v interface{}, filter string, table string, suffix ...string) (sq
 func (c *CRUD) UpdateSQL(v interface{}, filter string, table string, suffix ...string) (sql string, args []interface{}) {
 	sets, args := c.UpdateArgs(v, filter)
 	sql = fmt.Sprintf(`update %v set %v %v`, table, strings.Join(sets, ","), strings.Join(suffix, " "))
+	if c.Verbose {
+		c.Log("CRUD generate update sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
+	}
 	return
 }
 
@@ -246,6 +268,9 @@ func (c *CRUD) QueryField(v interface{}, filter string) (fields string) {
 		fieldsList = append(fieldsList, fmt.Sprintf("%v%v", name, conv))
 	})
 	fields = strings.Join(fieldsList, ",")
+	if c.Verbose {
+		c.Log("CRUD generate query field by struct:%v,filter:%v, result is fields:%v", reflect.TypeOf(v), filter, fields)
+	}
 	return
 }
 
@@ -257,6 +282,9 @@ func QuerySQL(v interface{}, filter, table string, suffix ...string) (sql string
 func (c *CRUD) QuerySQL(v interface{}, filter, table string, suffix ...string) (sql string) {
 	fields := c.QueryField(v, filter)
 	sql = fmt.Sprintf(`select %v from %v %v`, fields, table, strings.Join(suffix, " "))
+	if c.Verbose {
+		c.Log("CRUD generate query sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
+	}
 	return
 }
 
@@ -439,9 +467,15 @@ func (c *CRUD) Query(queryer, v interface{}, filter, sql string, args []interfac
 		panic("queryer is not supported")
 	}
 	if err != nil {
+		if c.Verbose {
+			c.Log("CRUD query by struct:%v,filter:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, err)
+		}
 		return
 	}
 	defer rows.Close()
+	if c.Verbose {
+		c.Log("CRUD query by struct:%v,filter:%v,sql:%v, result is success", reflect.TypeOf(v), filter, sql)
+	}
 	err = c.Scan(rows, v, filter, dest...)
 	return
 }
@@ -489,9 +523,15 @@ func (c *CRUD) QueryRow(queryer, v interface{}, filter, sql string, args []inter
 		panic("queryer is not supported")
 	}
 	if err != nil {
+		if c.Verbose {
+			c.Log("CRUD query row by struct:%v,filter:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, err)
+		}
 		return
 	}
 	defer rows.Close()
+	if c.Verbose {
+		c.Log("CRUD query row by struct:%v,filter:%v,sql:%v, result is success", reflect.TypeOf(v), filter, sql)
+	}
 	err = c.ScanRow(rows, v, filter, dest...)
 	return
 }
