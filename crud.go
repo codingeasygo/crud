@@ -245,6 +245,17 @@ func (c *CRUD) queryerQuery(queryer interface{}, sql string, args []interface{})
 	return
 }
 
+func (c *CRUD) queryerQueryRow(queryer interface{}, sql string, args []interface{}) (row Row) {
+	if q, ok := queryer.(Queryer); ok {
+		row = q.QueryRow(sql, args...)
+	} else if q, ok := queryer.(CrudQueryer); ok {
+		row = q.CrudQueryRow(sql, args...)
+	} else {
+		panic(fmt.Sprintf("queryer %v is not supported", reflect.TypeOf(queryer)))
+	}
+	return
+}
+
 func InsertArgs(v interface{}, filter string) (table string, fields, param []string, args []interface{}) {
 	table, fields, param, args = Default.InsertArgs(v, filter)
 	return
@@ -294,16 +305,8 @@ func (c *CRUD) InsertFilter(queryer, v interface{}, filter, join, scan string) (
 		sql += " " + join
 	}
 	sql += " " + strings.Join(scanFields, ",")
-	rows, err := c.queryerQuery(queryer, sql, args)
+	err = c.queryerQueryRow(queryer, sql, args).Scan(scanArgs...)
 	if err != nil {
-		if c.Verbose {
-			c.Log("CRUD insert filter by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
-		}
-		return
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		err = c.ErrNoRows
 		if c.Verbose {
 			c.Log("CRUD insert filter by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
 		}
@@ -312,7 +315,6 @@ func (c *CRUD) InsertFilter(queryer, v interface{}, filter, join, scan string) (
 	if c.Verbose {
 		c.Log("CRUD insert filter by struct:%v,sql:%v, result is success", reflect.TypeOf(v), sql)
 	}
-	err = rows.Scan(scanArgs...)
 	return
 }
 
@@ -692,21 +694,17 @@ func (c *CRUD) QuerySimple(queryer, v interface{}, filter string, suffix string,
 	return
 }
 
-func ScanRow(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
-	err = Default.ScanRow(rows, v, filter, dest...)
+func ScanRow(row Row, v interface{}, filter string, dest ...interface{}) (err error) {
+	err = Default.ScanRow(row, v, filter, dest...)
 	return
 }
 
-func (c *CRUD) ScanRow(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
+func (c *CRUD) ScanRow(row Row, v interface{}, filter string, dest ...interface{}) (err error) {
 	isPtr := reflect.ValueOf(v).Kind() == reflect.Ptr
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
-	if !rows.Next() {
-		err = c.ErrNoRows
-		return
-	}
 	value := reflect.New(reflectType)
-	err = rows.Scan(c.ScanArgs(value.Interface(), filter)...)
+	err = row.Scan(c.ScanArgs(value.Interface(), filter)...)
 	if err != nil {
 		return
 	}
@@ -726,18 +724,16 @@ func QueryRow(queryer, v interface{}, filter, sql string, args []interface{}, de
 }
 
 func (c *CRUD) QueryRow(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	rows, err := c.queryerQuery(queryer, sql, args)
+	err = c.ScanRow(c.queryerQueryRow(queryer, sql, args), v, filter, dest...)
 	if err != nil {
 		if c.Verbose {
 			c.Log("CRUD query by struct:%v,filter:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, err)
 		}
 		return
 	}
-	defer rows.Close()
 	if c.Verbose {
 		c.Log("CRUD query by struct:%v,filter:%v,sql:%v, result is success", reflect.TypeOf(v), filter, sql)
 	}
-	err = c.ScanRow(rows, v, filter, dest...)
 	return
 }
 

@@ -45,6 +45,11 @@ func (t *PoolQueryer) Exec(sql string, args ...interface{}) (affected int64, err
 	return
 }
 
+func (t *PoolQueryer) ExecRow(sql string, args ...interface{}) (err error) {
+	err = t.ExecErr
+	return
+}
+
 func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err error) {
 	if sql == "no" || t.QueryMode == "no" {
 		rows = &TestRows{
@@ -107,6 +112,15 @@ func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err err
 	return
 }
 
+func (t *PoolQueryer) QueryRow(sql string, args ...interface{}) (row Row) {
+	rows, _ := t.Query(sql, args...)
+	if !rows.Next() {
+		rows.(*TestRows).Err = Default.ErrNoRows
+	}
+	row = rows
+	return
+}
+
 type PoolCrudQueryer struct {
 	Queryer *PoolQueryer
 }
@@ -123,8 +137,18 @@ func (p *PoolCrudQueryer) CrudExec(sql string, args ...interface{}) (affected in
 	return
 }
 
+func (p *PoolCrudQueryer) CrudExecRow(sql string, args ...interface{}) (err error) {
+	err = p.Queryer.ExecRow(sql, args...)
+	return
+}
+
 func (p *PoolCrudQueryer) CrudQuery(sql string, args ...interface{}) (rows Rows, err error) {
 	rows, err = p.Queryer.Query(sql, args...)
+	return
+}
+
+func (p *PoolCrudQueryer) CrudQueryRow(sql string, args ...interface{}) (row Row) {
+	row = p.Queryer.QueryRow(sql, args...)
 	return
 }
 
@@ -140,10 +164,12 @@ func (t *TestRows) Scan(dests ...interface{}) (err error) {
 		return
 	}
 	err = t.Err
-	values := t.Values[t.Index]
-	for i, dest := range dests {
-		destValue := reflect.Indirect(reflect.ValueOf(dest))
-		destValue.Set(reflect.Indirect(reflect.ValueOf(values[i])))
+	if t.Index < len(t.Values) {
+		values := t.Values[t.Index]
+		for i, dest := range dests {
+			destValue := reflect.Indirect(reflect.ValueOf(dest))
+			destValue.Set(reflect.Indirect(reflect.ValueOf(values[i])))
+		}
 	}
 	return
 }
@@ -185,6 +211,7 @@ type Simple struct {
 
 func TestQueryer(t *testing.T) {
 	var err error
+	var row Row
 
 	_, err = Default.queryerQuery(NewPoolQueryer(), "test", []interface{}{})
 	if err != nil {
@@ -201,6 +228,23 @@ func TestQueryer(t *testing.T) {
 			recover()
 		}()
 		Default.queryerQuery("xxx", "test", []interface{}{})
+	}()
+
+	row = Default.queryerQueryRow(NewPoolQueryer(), "test", []interface{}{})
+	if row == nil {
+		t.Error(err)
+		return
+	}
+	row = Default.queryerQueryRow(NewPoolCrudQueryer(), "test", []interface{}{})
+	if row == nil {
+		t.Error(err)
+		return
+	}
+	func() {
+		defer func() {
+			recover()
+		}()
+		Default.queryerQueryRow("xxx", "test", []interface{}{})
 	}()
 
 	_, err = Default.queryerExec(NewPoolQueryer(), "test", []interface{}{})
@@ -282,7 +326,12 @@ func TestInsert(t *testing.T) {
 		return
 	}
 
-	err = InsertFilter(NewPoolQueryer(), simple, "^tid#all", "returning", "tid#all")
+	_, err = InsertFilter(NewPoolQueryer(), simple, "^tid#all", "returning", "tid#all")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	_, err = InsertFilter(NewPoolQueryer(), simple, "^tid#all", "", "")
 	if err != nil {
 		t.Error(err)
 		return
@@ -562,9 +611,9 @@ func TestScan(t *testing.T) {
 		}
 	}
 	{
-		rows, _ := (NewPoolQueryer()).Query("")
+		row := (NewPoolQueryer()).QueryRow("")
 		err = ScanRow(
-			rows, &Simple{}, "#all",
+			row, &Simple{}, "#all",
 			func(v *Simple) {
 				// simples1[v.TID] = v
 			},
@@ -584,7 +633,7 @@ func TestError(t *testing.T) {
 
 		//
 		pool.QueryMode = "no"
-		err = InsertFilter(pool, simple, "^tid#all", "returning", "tid#all")
+		_, err = InsertFilter(pool, simple, "^tid#all", "returning", "tid#all")
 		if err != Default.ErrNoRows {
 			t.Error(err)
 			return
@@ -592,7 +641,7 @@ func TestError(t *testing.T) {
 
 		//
 		pool.QueryErr = fmt.Errorf("error")
-		err = InsertFilter(pool, simple, "^tid#all", "returning", "tid#all")
+		_, err = InsertFilter(pool, simple, "^tid#all", "returning", "tid#all")
 		if err == nil {
 			t.Error(err)
 			return
@@ -767,24 +816,6 @@ func TestError(t *testing.T) {
 			return
 		}
 		err = Query(
-			&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples, "tid",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = QueryRow(
-			&PoolQueryer{QueryErr: fmt.Errorf("xx")}, &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples, "tid",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = QueryRow(
 			&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{}, "#all",
 			"sql", []interface{}{"arg"},
 			&simples, "tid",
