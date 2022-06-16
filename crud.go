@@ -276,16 +276,20 @@ func (c *CRUD) InsertSQL(v interface{}, filter string, suffix ...string) (sql st
 	return
 }
 
-func InsertFilter(queryer, v interface{}, filter, join, scan string) (err error) {
-	err = Default.InsertFilter(queryer, v, filter, join, scan)
+func InsertFilter(queryer, v interface{}, filter, join, scan string) (affected int64, err error) {
+	affected, err = Default.InsertFilter(queryer, v, filter, join, scan)
 	return
 }
 
-func (c *CRUD) InsertFilter(queryer, v interface{}, filter, join, scan string) (err error) {
+func (c *CRUD) InsertFilter(queryer, v interface{}, filter, join, scan string) (affected int64, err error) {
 	table, fields, param, args := c.InsertArgs(v, filter)
+	sql := fmt.Sprintf(`insert into %v(%v) values(%v)`, table, strings.Join(fields, ","), strings.Join(param, ","))
+	if len(scan) < 1 {
+		affected, err = c.queryerExec(queryer, sql, args)
+		return
+	}
 	_, scanFields := c.QueryField(v, scan)
 	scanArgs := c.ScanArgs(v, scan)
-	sql := fmt.Sprintf(`insert into %v(%v) values(%v)`, table, strings.Join(fields, ","), strings.Join(param, ","))
 	if len(join) > 0 {
 		sql += " " + join
 	}
