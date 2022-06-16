@@ -26,6 +26,27 @@ type CRUD struct {
 	NameConv  NameConv
 }
 
+func Table(v interface{}) (table string) {
+	table = Default.Table(v)
+	return
+}
+
+func (c *CRUD) Table(v interface{}) (table string) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
+	numField := reflectType.NumField()
+	for i := 0; i < numField; i++ {
+		fieldType := reflectType.Field(i)
+		if fieldType.Name == "_" {
+			if t := fieldType.Tag.Get("table"); len(t) > 0 {
+				table = t
+				break
+			}
+		}
+	}
+	return
+}
+
 func FilterFieldCall(on, filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) (table string) {
 	table = Default.FilterFieldCall(on, filter, v, call)
 	return
@@ -202,6 +223,28 @@ func (c *CRUD) JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
 	return
 }
 
+func (c *CRUD) queryerExec(queryer interface{}, sql string, args []interface{}) (affected int64, err error) {
+	if q, ok := queryer.(Queryer); ok {
+		affected, err = q.Exec(sql, args...)
+	} else if q, ok := queryer.(CrudQueryer); ok {
+		affected, err = q.CrudExec(sql, args...)
+	} else {
+		panic("queryer is not supported")
+	}
+	return
+}
+
+func (c *CRUD) queryerQuery(queryer interface{}, sql string, args []interface{}) (rows Rows, err error) {
+	if q, ok := queryer.(Queryer); ok {
+		rows, err = q.Query(sql, args...)
+	} else if q, ok := queryer.(CrudQueryer); ok {
+		rows, err = q.CrudQuery(sql, args...)
+	} else {
+		panic(fmt.Sprintf("queryer %v is not supported", reflect.TypeOf(queryer)))
+	}
+	return
+}
+
 func InsertArgs(v interface{}, filter string) (table string, fields, param []string, args []interface{}) {
 	table, fields, param, args = Default.InsertArgs(v, filter)
 	return
@@ -233,15 +276,51 @@ func (c *CRUD) InsertSQL(v interface{}, filter string, suffix ...string) (sql st
 	return
 }
 
-func UpdateArgs(v interface{}, filter string) (table string, sets []string, args []interface{}) {
-	table, sets, args = Default.UpdateArgs(v, filter)
+func InsertFilter(queryer, v interface{}, filter, join, scan string) (err error) {
+	err = Default.InsertFilter(queryer, v, filter, join, scan)
 	return
 }
 
-func (c *CRUD) UpdateArgs(v interface{}, filter string) (table string, sets []string, args []interface{}) {
+func (c *CRUD) InsertFilter(queryer, v interface{}, filter, join, scan string) (err error) {
+	table, fields, param, args := c.InsertArgs(v, filter)
+	_, scanFields := c.QueryField(v, scan)
+	scanArgs := c.ScanArgs(v, scan)
+	sql := fmt.Sprintf(`insert into %v(%v) values(%v)`, table, strings.Join(fields, ","), strings.Join(param, ","))
+	if len(join) > 0 {
+		sql += " " + join
+	}
+	sql += " " + strings.Join(scanFields, ",")
+	rows, err := c.queryerQuery(queryer, sql, args)
+	if err != nil {
+		if c.Verbose {
+			c.Log("CRUD insert filter by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
+		}
+		return
+	}
+	if !rows.Next() {
+		err = c.ErrNoRows
+		if c.Verbose {
+			c.Log("CRUD insert filter by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
+		}
+		return
+	}
+	if c.Verbose {
+		c.Log("CRUD insert filter by struct:%v,sql:%v, result is success", reflect.TypeOf(v), sql)
+	}
+	err = rows.Scan(scanArgs...)
+	return
+}
+
+func UpdateArgs(v interface{}, filter string, args []interface{}) (table string, sets []string, args_ []interface{}) {
+	table, sets, args_ = Default.UpdateArgs(v, filter, args)
+	return
+}
+
+func (c *CRUD) UpdateArgs(v interface{}, filter string, args []interface{}) (table string, sets []string, args_ []interface{}) {
+	args_ = args
 	table = c.FilterFieldCall("update", filter, v, func(name string, field reflect.StructField, value interface{}) {
-		args = append(args, value)
-		sets = append(sets, fmt.Sprintf("%v="+c.ArgFormat, name, len(args)))
+		args_ = append(args_, value)
+		sets = append(sets, fmt.Sprintf("%v="+c.ArgFormat, name, len(args_)))
 	})
 	if c.Verbose {
 		c.Log("CRUD generate update args by struct:%v,filter:%v, result is sets:%v", reflect.TypeOf(v), filter, sets)
@@ -249,13 +328,13 @@ func (c *CRUD) UpdateArgs(v interface{}, filter string) (table string, sets []st
 	return
 }
 
-func UpdateSQL(v interface{}, filter string, suffix ...string) (sql string, args []interface{}) {
-	sql, args = Default.UpdateSQL(v, filter, suffix...)
+func UpdateSQL(v interface{}, filter string, args []interface{}, suffix ...string) (sql string, args_ []interface{}) {
+	sql, args_ = Default.UpdateSQL(v, filter, args, suffix...)
 	return
 }
 
-func (c *CRUD) UpdateSQL(v interface{}, filter string, suffix ...string) (sql string, args []interface{}) {
-	table, sets, args := c.UpdateArgs(v, filter)
+func (c *CRUD) UpdateSQL(v interface{}, filter string, args []interface{}, suffix ...string) (sql string, args_ []interface{}) {
+	table, sets, args_ := c.UpdateArgs(v, filter, args)
 	sql = fmt.Sprintf(`update %v set %v %v`, table, strings.Join(sets, ","), strings.Join(suffix, " "))
 	if c.Verbose {
 		c.Log("CRUD generate update sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
@@ -263,18 +342,121 @@ func (c *CRUD) UpdateSQL(v interface{}, filter string, suffix ...string) (sql st
 	return
 }
 
-func QueryField(v interface{}, filter string) (table, fields string) {
+func Update(queryer, v interface{}, sets, where []string, sep string, args []interface{}) (affected int64, err error) {
+	affected, err = Default.Update(queryer, v, sets, where, sep, args)
+	return
+}
+
+func (c *CRUD) Update(queryer, v interface{}, sets, where []string, sep string, args []interface{}) (affected int64, err error) {
+	table := c.Table(v)
+	sql := fmt.Sprintf(`update %v set %v`, table, strings.Join(sets, ","))
+	sql = c.JoinWhere(sql, where, sep)
+	affected, err = c.queryerExec(queryer, sql, args)
+	if err != nil {
+		if c.Verbose {
+			c.Log("CRUD update by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
+		}
+		return
+	}
+	if c.Verbose {
+		c.Log("CRUD update by struct:%v,sql:%v, result is success affected:%v", reflect.TypeOf(v), sql, affected)
+	}
+	return
+}
+
+func UpdateRow(queryer, v interface{}, sets, where []string, sep string, args []interface{}) (err error) {
+	err = Default.UpdateRow(queryer, v, sets, where, sep, args)
+	return
+}
+
+func (c *CRUD) UpdateRow(queryer, v interface{}, sets, where []string, sep string, args []interface{}) (err error) {
+	affected, err := c.Update(queryer, v, sets, where, sep, args)
+	if err == nil && affected < 1 {
+		err = c.ErrNoRows
+	}
+	return
+}
+
+func UpdateFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}) (affected int64, err error) {
+	affected, err = Default.UpdateFilter(queryer, v, filter, where, sep, args)
+	return
+}
+
+func (c *CRUD) UpdateFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}) (affected int64, err error) {
+	sql, args := c.UpdateSQL(v, filter, args)
+	sql = c.JoinWhere(sql, where, sep)
+	affected, err = c.queryerExec(queryer, sql, args)
+	if err != nil {
+		if c.Verbose {
+			c.Log("CRUD update filter by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
+		}
+		return
+	}
+	if c.Verbose {
+		c.Log("CRUD update filter by struct:%v,sql:%v, result is success affected:%v", reflect.TypeOf(v), sql, affected)
+	}
+	return
+}
+
+func UpdateFilterRow(queryer, v interface{}, filter string, where []string, sep string, args []interface{}) (err error) {
+	err = Default.UpdateFilterRow(queryer, v, filter, where, sep, args)
+	return
+}
+
+func (c *CRUD) UpdateFilterRow(queryer, v interface{}, filter string, where []string, sep string, args []interface{}) (err error) {
+	affected, err := c.UpdateFilter(queryer, v, filter, where, sep, args)
+	if err == nil && affected < 1 {
+		err = c.ErrNoRows
+	}
+	return
+}
+
+func UpdateSimple(queryer, v interface{}, filter, suffix string, args []interface{}) (affected int64, err error) {
+	affected, err = Default.UpdateSimple(queryer, v, filter, suffix, args)
+	return
+}
+
+func (c *CRUD) UpdateSimple(queryer, v interface{}, filter, suffix string, args []interface{}) (affected int64, err error) {
+	sql, args := c.UpdateSQL(v, filter, args)
+	if len(suffix) > 0 {
+		sql += " " + suffix
+	}
+	affected, err = c.queryerExec(queryer, sql, args)
+	if err != nil {
+		if c.Verbose {
+			c.Log("CRUD update simple by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
+		}
+		return
+	}
+	if c.Verbose {
+		c.Log("CRUD update simple by struct:%v,sql:%v, result is success affected:%v", reflect.TypeOf(v), sql, affected)
+	}
+	return
+}
+
+func UpdateSimpleRow(queryer, v interface{}, filter, suffix string, args []interface{}) (err error) {
+	err = Default.UpdateSimpleRow(queryer, v, filter, suffix, args)
+	return
+}
+
+func (c *CRUD) UpdateSimpleRow(queryer, v interface{}, filter, suffix string, args []interface{}) (err error) {
+	affected, err := c.UpdateSimple(queryer, v, filter, suffix, args)
+	if err == nil && affected < 1 {
+		err = c.ErrNoRows
+	}
+	return
+}
+
+func QueryField(v interface{}, filter string) (table string, fields []string) {
 	table, fields = Default.QueryField(v, filter)
 	return
 }
 
-func (c *CRUD) QueryField(v interface{}, filter string) (table, fields string) {
-	fieldsList := []string{}
+func (c *CRUD) QueryField(v interface{}, filter string) (table string, fields []string) {
 	table = c.FilterFieldCall("query", filter, v, func(name string, field reflect.StructField, value interface{}) {
 		conv := field.Tag.Get("conv")
-		fieldsList = append(fieldsList, fmt.Sprintf("%v%v", name, conv))
+		fields = append(fields, fmt.Sprintf("%v%v", name, conv))
 	})
-	fields = strings.Join(fieldsList, ",")
 	if c.Verbose {
 		c.Log("CRUD generate query field by struct:%v,filter:%v, result is fields:%v", reflect.TypeOf(v), filter, fields)
 	}
@@ -288,7 +470,7 @@ func QuerySQL(v interface{}, filter string, suffix ...string) (sql string) {
 
 func (c *CRUD) QuerySQL(v interface{}, filter string, suffix ...string) (sql string) {
 	table, fields := c.QueryField(v, filter)
-	sql = fmt.Sprintf(`select %v from %v %v`, fields, table, strings.Join(suffix, " "))
+	sql = fmt.Sprintf(`select %v from %v %v`, strings.Join(fields, ","), table, strings.Join(suffix, " "))
 	if c.Verbose {
 		c.Log("CRUD generate query sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
 	}
@@ -433,17 +615,6 @@ func (c *CRUD) destSet(value reflect.Value, dests ...interface{}) (err error) {
 	return
 }
 
-func (c *CRUD) queryRows(queryer interface{}, sql string, args []interface{}) (rows Rows, err error) {
-	if q, ok := queryer.(Queryer); ok {
-		rows, err = q.Query(sql, args...)
-	} else if q, ok := queryer.(CrudQueryer); ok {
-		rows, err = q.CrudQuery(sql, args...)
-	} else {
-		panic("queryer is not supported")
-	}
-	return
-}
-
 func Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
 	err = Default.Scan(rows, v, filter, dest...)
 	return
@@ -476,7 +647,7 @@ func Query(queryer, v interface{}, filter, sql string, args []interface{}, dest 
 }
 
 func (c *CRUD) Query(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	rows, err := c.queryRows(queryer, sql, args)
+	rows, err := c.queryerQuery(queryer, sql, args)
 	if err != nil {
 		if c.Verbose {
 			c.Log("CRUD query by struct:%v,filter:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, err)
@@ -550,7 +721,7 @@ func QueryRow(queryer, v interface{}, filter, sql string, args []interface{}, de
 }
 
 func (c *CRUD) QueryRow(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	rows, err := c.queryRows(queryer, sql, args)
+	rows, err := c.queryerQuery(queryer, sql, args)
 	if err != nil {
 		if c.Verbose {
 			c.Log("CRUD query by struct:%v,filter:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, err)

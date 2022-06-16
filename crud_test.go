@@ -25,12 +25,28 @@ func JSON(v interface{}) string {
 }
 
 type PoolQueryer struct {
-	QueryErr error
-	ScanErr  error
+	ExecErr      error
+	ExecAffected int64
+	QueryMode    string
+	QueryErr     error
+	ScanErr      error
+}
+
+func NewPoolQueryer() (pool *PoolQueryer) {
+	pool = &PoolQueryer{
+		ExecAffected: 1,
+	}
+	return
+}
+
+func (t *PoolQueryer) Exec(sql string, args ...interface{}) (affected int64, err error) {
+	affected = t.ExecAffected
+	err = t.ExecErr
+	return
 }
 
 func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err error) {
-	if sql == "no" {
+	if sql == "no" || t.QueryMode == "no" {
 		rows = &TestRows{
 			Err:   t.ScanErr,
 			Index: -1,
@@ -38,7 +54,7 @@ func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err err
 		err = t.QueryErr
 		return
 	}
-	if sql == "int64" {
+	if sql == "int64" || t.QueryMode == "int64" {
 		rows = &TestRows{
 			Err:   t.ScanErr,
 			Index: -1,
@@ -93,6 +109,18 @@ func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err err
 
 type PoolCrudQueryer struct {
 	Queryer *PoolQueryer
+}
+
+func NewPoolCrudQueryer() (pool *PoolCrudQueryer) {
+	pool = &PoolCrudQueryer{
+		Queryer: NewPoolQueryer(),
+	}
+	return
+}
+
+func (p *PoolCrudQueryer) CrudExec(sql string, args ...interface{}) (affected int64, err error) {
+	affected, err = p.Queryer.Exec(sql, args...)
+	return
 }
 
 func (p *PoolCrudQueryer) CrudQuery(sql string, args ...interface{}) (rows Rows, err error) {
@@ -155,8 +183,77 @@ type Simple struct {
 	XX         string    `json:"-"`
 }
 
-//AddSimple will add material group to database
-func AddSimple(simple *Simple) (err error) {
+func TestQueryer(t *testing.T) {
+	var err error
+
+	_, err = Default.queryerQuery(NewPoolQueryer(), "test", []interface{}{})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	_, err = Default.queryerQuery(NewPoolCrudQueryer(), "test", []interface{}{})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	func() {
+		defer func() {
+			recover()
+		}()
+		Default.queryerQuery("xxx", "test", []interface{}{})
+	}()
+
+	_, err = Default.queryerExec(NewPoolQueryer(), "test", []interface{}{})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	_, err = Default.queryerExec(NewPoolCrudQueryer(), "test", []interface{}{})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	func() {
+		defer func() {
+			recover()
+		}()
+		Default.queryerExec("xxx", "test", []interface{}{})
+	}()
+}
+
+func TestField(t *testing.T) {
+	table := ""
+	title := "test"
+	simple := &Simple{
+		UserID: 100,
+		Type:   "test",
+		Title:  &title,
+		Image:  &title,
+		Status: SimpleStatusNormal,
+	}
+	table = Table(simple)
+	if table != "crud_simple" {
+		t.Error("error")
+		return
+	}
+	table = FilterFieldCall("test", "#all", simple, func(name string, field reflect.StructField, value interface{}) {
+	})
+	if table != "crud_simple" {
+		t.Error("error")
+		return
+	}
+}
+
+func TestInsert(t *testing.T) {
+	var err error
+	title := "test"
+	simple := &Simple{
+		UserID: 100,
+		Type:   "test",
+		Title:  &title,
+		Image:  &title,
+		Status: SimpleStatusNormal,
+	}
 	simple.CreateTime = time.Now()
 	simple.UpdateTime = time.Now()
 	insertSQL, insertArg := InsertSQL(simple, "", "returning tid")
@@ -169,32 +266,49 @@ func AddSimple(simple *Simple) (err error) {
 	fmt.Printf("   --->%v\n", insertArg1)
 	if strings.Contains(insertSQL1, "update_time") {
 		err = fmt.Errorf("error")
+		t.Error(err)
 		return
 	}
 	table, fileds, param, args := InsertArgs(simple, "")
 	if table != "crud_simple" {
 		err = fmt.Errorf("table error")
+		t.Error(err)
 		return
 	}
 	fileds, param, args = AppendInsert(fileds, param, args, true, "xx=$%v", "1")
 	if len(fileds) < 1 || len(param) < 1 || len(args) < 1 {
 		err = fmt.Errorf("error")
+		t.Error(err)
 		return
 	}
-	return
+
+	err = InsertFilter(NewPoolQueryer(), simple, "^tid#all", "returning", "tid#all")
+	if err != nil {
+		t.Error(err)
+		return
+	}
 }
 
-//UpdateSimple will update material group to database
-func UpdateSimple(simple *Simple) (eff int, err error) {
+func TestUpdate(t *testing.T) {
+	var err error
+	title := "test"
+	simple := &Simple{
+		UserID: 100,
+		Type:   "test",
+		Title:  &title,
+		Image:  &title,
+		Status: SimpleStatusNormal,
+	}
 	simple.UpdateTime = time.Now()
 	var updateSQL string
 	var where []string
 	var args []interface{}
 
-	updateSQL, args = UpdateSQL(simple, "title,image,update_time,status")
+	updateSQL, args = UpdateSQL(simple, "title,image,update_time,status", nil)
 
 	if strings.Contains(updateSQL, "tid") {
 		err = fmt.Errorf("error")
+		t.Error(err)
 		return
 	}
 
@@ -206,49 +320,65 @@ func UpdateSimple(simple *Simple) (eff int, err error) {
 	fmt.Printf("   --->%v\n", updateSQL)
 	fmt.Printf("   --->%v\n", args)
 
-	updateSQL, args = UpdateSQL(simple, "", "crud_simple")
+	updateSQL, args = UpdateSQL(simple, "", nil)
 	fmt.Printf("update\n")
 	fmt.Printf("   --->%v\n", updateSQL)
 	fmt.Printf("   --->%v\n", args)
 
-	table, sets, args := UpdateArgs(simple, "")
+	table, sets, args := UpdateArgs(simple, "", nil)
 	if table != "crud_simple" {
 		err = fmt.Errorf("table error")
+		t.Error(err)
 		return
 	}
+	fmt.Printf("update\n")
+	fmt.Printf("   --->%v\n", table)
+	fmt.Printf("   --->%v\n", sets)
+	fmt.Printf("   --->%v\n", args)
+
 	sets, args = AppendSet(sets, args, true, "xx=$%v", "1")
 	fmt.Printf("update\n")
 	fmt.Printf("   --->%v\n", sets)
 	fmt.Printf("   --->%v\n", args)
-	return
-}
 
-func LoadSimple(userID, simpleID int64) (err error) {
-	simple := &Simple{}
-	var where []string
-	var args []interface{}
-	querySQL := QuerySQL(simple, "#nil,zero")
-	where, args = AppendWhere(where, args, true, "user_id=$%v", userID)
-	where, args = AppendWhere(where, args, true, "tid=$%v", simpleID)
-	querySQL = JoinWhere(querySQL, where, "and")
-	fmt.Printf("query\n")
-	fmt.Printf("   --->%v\n", querySQL)
-	fmt.Printf("   --->%v\n", args)
-
-	table, fileds := QueryField(simple, "#all")
-	if table != "crud_simple" {
-		err = fmt.Errorf("table error")
+	_, err = Update(NewPoolQueryer(), simple, sets, where, "and", args)
+	if err != nil {
+		t.Error(err)
 		return
 	}
-	fmt.Printf("query\n")
-	fmt.Printf("   --->%v\n", fileds)
-	if len(fileds) < 1 {
-		err = fmt.Errorf("fail")
+	err = UpdateRow(NewPoolQueryer(), simple, sets, where, "and", args)
+	if err != nil {
+		t.Error(err)
+		return
 	}
-	return
+
+	_, err = UpdateFilter(NewPoolQueryer(), simple, "title,image,update_time,status", where, "and", args)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = UpdateFilterRow(NewPoolQueryer(), simple, "title,image,update_time,status", where, "and", args)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	_, err = UpdateSimple(NewPoolQueryer(), simple, "title,image,update_time,status", "", nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = UpdateSimpleRow(NewPoolQueryer(), simple, "title,image,update_time,status", "where tid=$1", []interface{}{1})
+	if err != nil {
+		t.Error(err)
+		return
+	}
 }
 
-func SearchSimple(userID int64, key string) (err error) {
+func TestSearch(t *testing.T) {
+	var err error
+	var userID int64
+	var key string
 	simple := &Simple{}
 	var where []string
 	var args []interface{}
@@ -264,14 +394,16 @@ func SearchSimple(userID int64, key string) (err error) {
 	table, fileds := QueryField(simple, "#all")
 	if table != "crud_simple" {
 		err = fmt.Errorf("table error")
+		t.Error(err)
 		return
 	}
 	fmt.Printf("query\n")
 	fmt.Printf("   --->%v\n", fileds)
 	if len(fileds) < 1 {
 		err = fmt.Errorf("fail")
+		t.Error(err)
+		return
 	}
-	return
 }
 
 type UserIDx map[int64]string
@@ -281,7 +413,8 @@ func (u UserIDx) Scan(v interface{}) {
 	u[s.TID] = fmt.Sprintf("%v-%v", s.Title, s.UserID)
 }
 
-func ScanSimple() (err error) {
+func TestQuery(t *testing.T) {
+	var err error
 	var simpleList []*Simple
 	var simple *Simple
 	var userIDs0, userIDs1 []int64
@@ -292,7 +425,7 @@ func ScanSimple() (err error) {
 	var userIDm1 map[int64][]int64
 	var userIDx = UserIDx{}
 	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
+		NewPoolQueryer(), &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simpleList, &simple,
 		&userIDs0, "user_id",
@@ -309,6 +442,7 @@ func ScanSimple() (err error) {
 		},
 	)
 	if err != nil {
+		t.Error(err)
 		return
 	}
 	if len(simpleList) < 1 || simple == nil || len(userIDs0) < 1 || len(userIDs1) < 1 ||
@@ -324,6 +458,7 @@ func ScanSimple() (err error) {
 			len(userIDm0), len(userIDm1), len(userIDx),
 		)
 		err = fmt.Errorf("data error")
+		t.Error(err)
 		return
 	}
 	data, _ := json.MarshalIndent(map[string]interface{}{
@@ -342,7 +477,7 @@ func ScanSimple() (err error) {
 	fmt.Println("-->\n", string(data))
 
 	err = QueryRow(
-		&PoolQueryer{}, &Simple{}, "#all",
+		NewPoolQueryer(), &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simple,
 	)
@@ -350,303 +485,313 @@ func ScanSimple() (err error) {
 		return
 	}
 
+	//
+	//test int64
 	var testIDs0 []int64
 	var testIDs1 int64
 	err = Query(
-		&PoolCrudQueryer{Queryer: &PoolQueryer{}}, int64(0), "",
+		&PoolQueryer{}, int64(0), "",
 		"int64", []interface{}{"arg"},
 		&testIDs0,
 	)
 	if err != nil || len(testIDs0) != 3 {
 		err = fmt.Errorf("error")
+		t.Error(err)
 		return
 	}
 	err = QueryRow(
-		&PoolCrudQueryer{Queryer: &PoolQueryer{}}, int64(0), "",
+		&PoolQueryer{}, int64(0), "",
 		"int64", []interface{}{"arg"},
 		&testIDs1,
 	)
 	if err != nil || testIDs1 < 1 {
 		err = fmt.Errorf("error")
+		t.Error(err)
 		return
 	}
+
+	//
 	//
 	simpleList = []*Simple{}
-	err = QueryFilter(&PoolQueryer{}, &Simple{}, "#all", nil, "", nil, "", 0, 10, &simpleList)
+	err = QueryFilter(NewPoolQueryer(), &Simple{}, "#all", nil, "", nil, "", 0, 10, &simpleList)
 	if err != nil {
 		return
 	}
 	if len(simpleList) < 1 {
 		err = fmt.Errorf("data error")
+		t.Error(err)
 		return
 	}
-	err = QueryFilterRow(&PoolQueryer{}, &Simple{}, "#all", nil, "", []interface{}{"arg"}, &simple)
+	err = QueryFilterRow(NewPoolQueryer(), &Simple{}, "#all", nil, "", []interface{}{"arg"}, &simple)
 	if err != nil {
+		t.Error(err)
 		return
 	}
 	//
 	simpleList = []*Simple{}
-	err = QuerySimple(&PoolQueryer{}, &Simple{}, "#all", "", []interface{}{"arg"}, 0, 10, &simpleList)
+	err = QuerySimple(NewPoolQueryer(), &Simple{}, "#all", "", []interface{}{"arg"}, 0, 10, &simpleList)
 	if err != nil {
+		t.Error(err)
 		return
 	}
 	if len(simpleList) < 1 {
 		err = fmt.Errorf("data error")
+		t.Error(err)
 		return
 	}
-	err = QuerySimpleRow(&PoolQueryer{}, &Simple{}, "#all", "", []interface{}{"arg"}, &simple)
+	err = QuerySimpleRow(NewPoolQueryer(), &Simple{}, "#all", "", []interface{}{"arg"}, &simple)
 	if err != nil {
+		t.Error(err)
 		return
 	}
-	return
 }
 
-func ScanError() (err error) {
-	rows, _ := (&PoolQueryer{}).Query("")
-	Scan(
-		rows, &Simple{}, "#all",
-		func(v *Simple) {
-			// simples1[v.TID] = v
-		},
-	)
-	ScanRow(
-		rows, &Simple{}, "#all",
-		func(v *Simple) {
-			// simples1[v.TID] = v
-		},
-	)
-	ScanArgs(&Simple{}, "#all")
-	//
-	var images []*string
-	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&images,
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&images, 1,
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&images, "",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&images, "not",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = QueryRow(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&images, "not",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = QueryRow(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"no", []interface{}{"arg"},
-		&images, "image",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	//
-	var simples map[int64]*Simple
-	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simples,
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simples, 1,
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simples, "",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simples, "not",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simples, "tid:not",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-
-	//
-	err = Query(
-		&PoolQueryer{}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		1,
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-
-	//
-	err = Query(
-		&PoolQueryer{QueryErr: fmt.Errorf("xx")}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simples, "tid",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = Query(
-		&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simples, "tid",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = QueryRow(
-		&PoolQueryer{QueryErr: fmt.Errorf("xx")}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simples, "tid",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	err = QueryRow(
-		&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simples, "tid",
-	)
-	if err == nil {
-		err = fmt.Errorf("not error")
-		return
-	}
-	func() {
-		defer func() {
-			recover()
-		}()
-		Query(
-			"xxx", &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples, "tid",
-		)
-	}()
-	func() {
-		defer func() {
-			recover()
-		}()
-		QueryRow(
-			"xxx", &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples, "tid",
-		)
-	}()
-	err = nil
-	return
-}
-
-func TestSimple(t *testing.T) {
+func TestScan(t *testing.T) {
 	var err error
-	title := "test"
-	simple := &Simple{
-		UserID: 100,
-		Type:   "test",
-		Title:  &title,
-		Image:  &title,
-		Status: SimpleStatusNormal,
+	{
+		rows, _ := (NewPoolQueryer()).Query("")
+		err = Scan(
+			rows, &Simple{}, "#all",
+			func(v *Simple) {
+				// simples1[v.TID] = v
+			},
+		)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
-	FilterFieldCall("test", "#all", simple, func(name string, field reflect.StructField, value interface{}) {
-	})
-	err = AddSimple(simple)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		rows, _ := (NewPoolQueryer()).Query("")
+		err = ScanRow(
+			rows, &Simple{}, "#all",
+			func(v *Simple) {
+				// simples1[v.TID] = v
+			},
+		)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
-	err = AddSimple(&Simple{
-		UserID: 0,
-		Type:   "test",
-		Title:  &title,
-		Status: SimpleStatusNormal,
-	})
-	if err != nil {
-		t.Error(err)
-		return
-	}
+}
 
-	_, err = UpdateSimple(simple)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+func TestError(t *testing.T) {
+	var err error
+	{ //insert error
+		simple := &Simple{}
+		pool := NewPoolQueryer()
 
-	err = LoadSimple(simple.UserID, simple.TID)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+		//
+		pool.QueryMode = "no"
+		err = InsertFilter(pool, simple, "^tid#all", "returning", "tid#all")
+		if err != Default.ErrNoRows {
+			t.Error(err)
+			return
+		}
 
-	err = SearchSimple(simple.UserID, "t")
-	if err != nil {
-		t.Error(err)
-		return
+		//
+		pool.QueryErr = fmt.Errorf("error")
+		err = InsertFilter(pool, simple, "^tid#all", "returning", "tid#all")
+		if err == nil {
+			t.Error(err)
+			return
+		}
 	}
+	{ //update error
+		simple := &Simple{}
+		pool := NewPoolQueryer()
 
-	err = ScanSimple()
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	err = ScanError()
-	if err != nil {
-		t.Error(err)
-		return
-	}
+		//
+		pool.ExecAffected = 1
+		pool.ExecErr = fmt.Errorf("error")
+		_, sets, args := UpdateArgs(simple, "", nil)
+		_, err = Update(pool, simple, sets, nil, "", args)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		_, err = UpdateFilter(pool, simple, "title,image,update_time,status", nil, "", nil)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		_, err = UpdateSimple(pool, simple, "title,image,update_time,status", "", nil)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
 
+		//
+		pool.ExecAffected = 0
+		pool.ExecErr = nil
+		err = UpdateRow(pool, simple, sets, nil, "", args)
+		if err != Default.ErrNoRows {
+			t.Error("not error")
+			return
+		}
+		err = UpdateFilterRow(pool, simple, "title,image,update_time,status", nil, "", nil)
+		if err != Default.ErrNoRows {
+			t.Error("not error")
+			return
+		}
+		err = UpdateSimpleRow(pool, simple, "title,image,update_time,status", "", nil)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+	}
+	{ //query error
+		var images []*string
+		err = Query(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&images,
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = Query(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&images, 1,
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = Query(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&images, "",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = Query(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&images, "not",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = QueryRow(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&images, "not",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = QueryRow(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"no", []interface{}{"arg"},
+			&images, "image",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		//
+		var simples map[int64]*Simple
+		err = Query(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples,
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = Query(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples, 1,
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = Query(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples, "",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = Query(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples, "not",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = Query(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples, "tid:not",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+
+		//
+		err = Query(
+			NewPoolQueryer(), &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			1,
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+
+		//
+		err = Query(
+			&PoolQueryer{QueryErr: fmt.Errorf("xx")}, &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples, "tid",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = Query(
+			&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples, "tid",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = QueryRow(
+			&PoolQueryer{QueryErr: fmt.Errorf("xx")}, &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples, "tid",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+		err = QueryRow(
+			&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{}, "#all",
+			"sql", []interface{}{"arg"},
+			&simples, "tid",
+		)
+		if err == nil {
+			t.Error("not error")
+			return
+		}
+	}
 }
