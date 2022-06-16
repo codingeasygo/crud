@@ -142,6 +142,7 @@ var (
 )
 
 type Simple struct {
+	_          string    `table:"crud_simple"`
 	TID        int64     `json:"tid"`
 	UserID     int64     `json:"user_id"`
 	Type       string    `json:"type"`
@@ -158,7 +159,7 @@ type Simple struct {
 func AddSimple(simple *Simple) (err error) {
 	simple.CreateTime = time.Now()
 	simple.UpdateTime = time.Now()
-	insertSQL, insertArg := InsertSQL(simple, "", "crud_simple", "returning tid")
+	insertSQL, insertArg := InsertSQL(simple, "", "returning tid")
 	fmt.Printf("insert\n")
 	fmt.Printf("   --->%v\n", insertSQL)
 	fmt.Printf("   --->%v\n", insertArg)
@@ -170,7 +171,11 @@ func AddSimple(simple *Simple) (err error) {
 		err = fmt.Errorf("error")
 		return
 	}
-	fileds, param, args := InsertArgs(simple, "")
+	table, fileds, param, args := InsertArgs(simple, "")
+	if table != "crud_simple" {
+		err = fmt.Errorf("table error")
+		return
+	}
 	fileds, param, args = AppendInsert(fileds, param, args, true, "xx=$%v", "1")
 	if len(fileds) < 1 || len(param) < 1 || len(args) < 1 {
 		err = fmt.Errorf("error")
@@ -186,7 +191,7 @@ func UpdateSimple(simple *Simple) (eff int, err error) {
 	var where []string
 	var args []interface{}
 
-	updateSQL, args = UpdateSQL(simple, "title,image,update_time,status", "crud_simple")
+	updateSQL, args = UpdateSQL(simple, "title,image,update_time,status")
 
 	if strings.Contains(updateSQL, "tid") {
 		err = fmt.Errorf("error")
@@ -206,7 +211,11 @@ func UpdateSimple(simple *Simple) (eff int, err error) {
 	fmt.Printf("   --->%v\n", updateSQL)
 	fmt.Printf("   --->%v\n", args)
 
-	sets, args := UpdateArgs(simple, "")
+	table, sets, args := UpdateArgs(simple, "")
+	if table != "crud_simple" {
+		err = fmt.Errorf("table error")
+		return
+	}
 	sets, args = AppendSet(sets, args, true, "xx=$%v", "1")
 	fmt.Printf("update\n")
 	fmt.Printf("   --->%v\n", sets)
@@ -218,7 +227,7 @@ func LoadSimple(userID, simpleID int64) (err error) {
 	simple := &Simple{}
 	var where []string
 	var args []interface{}
-	querySQL := QuerySQL(simple, "#nil,zero", "crud_simple")
+	querySQL := QuerySQL(simple, "#nil,zero")
 	where, args = AppendWhere(where, args, true, "user_id=$%v", userID)
 	where, args = AppendWhere(where, args, true, "tid=$%v", simpleID)
 	querySQL = JoinWhere(querySQL, where, "and")
@@ -226,7 +235,11 @@ func LoadSimple(userID, simpleID int64) (err error) {
 	fmt.Printf("   --->%v\n", querySQL)
 	fmt.Printf("   --->%v\n", args)
 
-	fileds := QueryField(simple, "#all")
+	table, fileds := QueryField(simple, "#all")
+	if table != "crud_simple" {
+		err = fmt.Errorf("table error")
+		return
+	}
 	fmt.Printf("query\n")
 	fmt.Printf("   --->%v\n", fileds)
 	if len(fileds) < 1 {
@@ -239,7 +252,7 @@ func SearchSimple(userID int64, key string) (err error) {
 	simple := &Simple{}
 	var where []string
 	var args []interface{}
-	querySQL := QuerySQL(simple, "#nil,zero", "crud_simple")
+	querySQL := QuerySQL(simple, "#nil,zero")
 	where, args = AppendWhere(where, args, true, "user_id=$%v", userID)
 	where, args = AppendWhereN(where, args, true, "(title like $%v or data like $%v)", 2, "%"+key+"%")
 	querySQL = JoinWhere(querySQL, where, "and")
@@ -248,7 +261,11 @@ func SearchSimple(userID int64, key string) (err error) {
 	fmt.Printf("   --->%v\n", querySQL)
 	fmt.Printf("   --->%v\n", args)
 
-	fileds := QueryField(simple, "#all")
+	table, fileds := QueryField(simple, "#all")
+	if table != "crud_simple" {
+		err = fmt.Errorf("table error")
+		return
+	}
 	fmt.Printf("query\n")
 	fmt.Printf("   --->%v\n", fileds)
 	if len(fileds) < 1 {
@@ -353,7 +370,34 @@ func ScanSimple() (err error) {
 		err = fmt.Errorf("error")
 		return
 	}
-	fmt.Println("--->", testIDs0)
+	//
+	simpleList = []*Simple{}
+	err = QueryFilter(&PoolQueryer{}, &Simple{}, "#all", nil, "", nil, "", 0, 10, &simpleList)
+	if err != nil {
+		return
+	}
+	if len(simpleList) < 1 {
+		err = fmt.Errorf("data error")
+		return
+	}
+	err = QueryFilterRow(&PoolQueryer{}, &Simple{}, "#all", nil, "", []interface{}{"arg"}, &simple)
+	if err != nil {
+		return
+	}
+	//
+	simpleList = []*Simple{}
+	err = QuerySimple(&PoolQueryer{}, &Simple{}, "#all", "", []interface{}{"arg"}, 0, 10, &simpleList)
+	if err != nil {
+		return
+	}
+	if len(simpleList) < 1 {
+		err = fmt.Errorf("data error")
+		return
+	}
+	err = QuerySimpleRow(&PoolQueryer{}, &Simple{}, "#all", "", []interface{}{"arg"}, &simple)
+	if err != nil {
+		return
+	}
 	return
 }
 
@@ -560,13 +604,21 @@ func TestSimple(t *testing.T) {
 	}
 	FilterFieldCall("test", "#all", simple, func(name string, field reflect.StructField, value interface{}) {
 	})
-	AddSimple(simple)
-	AddSimple(&Simple{
+	err = AddSimple(simple)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = AddSimple(&Simple{
 		UserID: 0,
 		Type:   "test",
 		Title:  &title,
 		Status: SimpleStatusNormal,
 	})
+	if err != nil {
+		t.Error(err)
+		return
+	}
 
 	_, err = UpdateSimple(simple)
 	if err != nil {

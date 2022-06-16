@@ -52,7 +52,7 @@ package gen
 // 	gen.NameConv = func(isTable bool, name string) string {
 // 		return ConvCamelCase(isTable, strings.TrimPrefix(name, "crud_"))
 // 	}
-// 	err = gen.GenerateByTemplate(StructTmpl, os.Stdout)
+// 	err = gen.GenerateByTemplate("struct", StructTmpl, os.Stdout)
 // 	if err != nil {
 // 		t.Error(err)
 // 		return
