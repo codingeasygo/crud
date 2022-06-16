@@ -85,7 +85,7 @@ func (c *CRUD) FilterFieldCall(on, filter string, v interface{}, call func(name 
 				table = t
 			}
 		}
-		fieldName := fieldType.Tag.Get(c.Tag)
+		fieldName := strings.SplitN(fieldType.Tag.Get(c.Tag), ",", 2)[0]
 		fieldKind := fieldValue.Kind()
 		checkValue := fieldValue
 		if len(fieldName) < 1 || fieldName == "-" {
