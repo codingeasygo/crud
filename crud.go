@@ -301,6 +301,7 @@ func (c *CRUD) InsertFilter(queryer, v interface{}, filter, join, scan string) (
 		}
 		return
 	}
+	defer rows.Close()
 	if !rows.Next() {
 		err = c.ErrNoRows
 		if c.Verbose {
