@@ -17,18 +17,21 @@ func jsonString(v interface{}) string {
 }
 
 func NewValue(v interface{}) (value reflect.Value) {
+	if v, ok := v.([]interface{}); ok {
+		result := []interface{}{}
+		for i, f := range v {
+			if _, ok := f.(TableName); ok {
+				continue
+			}
+			item := reflect.New(reflect.ValueOf(v[i]).Type())
+			result = append(result, item.Interface())
+		}
+		value = reflect.ValueOf(result)
+		return
+	}
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	value = reflect.New(reflectType)
-	if reflectType.Kind() != reflect.Slice {
-		return
-	}
-	value = reflect.Indirect(value)
-	for i := 0; i < reflectValue.Len(); i++ {
-		v := reflectValue.Index(i)
-		item := reflect.New(v.Elem().Type())
-		value.Set(reflect.Append(value, item))
-	}
 	return
 }
 

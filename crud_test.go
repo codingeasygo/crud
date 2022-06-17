@@ -277,12 +277,47 @@ func TestNewValue(t *testing.T) {
 		fmt.Println(value)
 	}
 	{
-		value := NewValue([]interface{}{int64(0)})
-		if _, ok := value.Interface().([]interface{}); !ok {
+		src := []interface{}{string(""), int64(0)}
+		value := NewValue(src).Interface().([]interface{})
+		fmt.Println(src)
+		fmt.Println(value)
+		for i, s := range src {
+			d := value[i]
+			if reflect.TypeOf(s) != reflect.ValueOf(d).Elem().Type() {
+				t.Error("error")
+				return
+			}
+		}
+		FilterFieldCall("test", value, "title,tid", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+			fmt.Println(value)
+		})
+	}
+	{
+		var strVal string
+		var intVal int64
+		src := []interface{}{&strVal, &intVal}
+		value := NewValue(src).Interface().([]interface{})
+		fmt.Println(src)
+		fmt.Println(value)
+		for i, s := range src {
+			d := value[i]
+			if d == nil || reflect.TypeOf(s) != reflect.ValueOf(d).Elem().Type() {
+				t.Error("error")
+				return
+			}
+			fmt.Printf("%v,%v\n", d == nil, reflect.TypeOf(d))
+		}
+		FilterFieldCall("test", value, "title,tid", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+			fmt.Printf("%v\n", reflect.TypeOf(value))
+		})
+	}
+	{
+		src := []interface{}{TableName("xx"), string(""), int64(0)}
+		value := NewValue(src).Interface().([]interface{})
+		if len(value)+1 != len(src) {
 			t.Error("error")
 			return
 		}
-		fmt.Println(value)
 	}
 }
 
@@ -770,7 +805,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal *int64
-		err = CountSimple(NewPoolQueryer(), []interface{}{countVal}, "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		err = CountSimple(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -779,7 +814,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var typeVal *string
-		err = QuerySimpleRow(NewPoolQueryer(), []interface{}{int64(0), int64(0), typeVal}, "tid,user_id,type#all", "where tid>$1", []interface{}{1}, &typeVal, "type")
+		err = QuerySimpleRow(NewPoolQueryer(), MetaWith(simple, int64(0), int64(0), typeVal), "tid,user_id,type#all", "where tid>$1", []interface{}{1}, &typeVal, "type")
 		if err != nil {
 			t.Error(err)
 			return
@@ -788,7 +823,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal int64
-		err = QuerySimpleRow(NewPoolQueryer(), []interface{}{countVal}, "tid#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		err = QuerySimpleRow(NewPoolQueryer(), MetaWith(simple, countVal), "tid#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -797,7 +832,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var typeVal string
-		err = QuerySimpleRow(NewPoolQueryer(), []interface{}{int64(0), int64(0), typeVal}, "tid,user_id,type#all", "where tid>$1", []interface{}{1}, &typeVal, "type")
+		err = QuerySimpleRow(NewPoolQueryer(), MetaWith(simple, int64(0), int64(0), typeVal), "tid,user_id,type#all", "where tid>$1", []interface{}{1}, &typeVal, "type")
 		if err != nil {
 			t.Error(err)
 			return
@@ -806,7 +841,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal int64
-		err = CountSimple(NewPoolQueryer(), []interface{}{countVal}, "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		err = CountSimple(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
