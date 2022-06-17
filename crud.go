@@ -32,6 +32,12 @@ func NewValue(v interface{}) (value reflect.Value) {
 	return
 }
 
+func MetaWith(table string, fields ...interface{}) (v []interface{}) {
+	v = append(v, TableName(table))
+	v = append(v, fields...)
+	return
+}
+
 var Default = &CRUD{
 	Tag:       "json",
 	ArgFormat: "$%v",
@@ -58,6 +64,15 @@ func Table(v interface{}) (table string) {
 }
 
 func (c *CRUD) Table(v interface{}) (table string) {
+	if v, ok := v.([]interface{}); ok {
+		for _, f := range v {
+			if tableName, ok := f.(TableName); ok {
+				table = string(tableName)
+				break
+			}
+		}
+		return
+	}
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	numField := reflectType.NumField()
