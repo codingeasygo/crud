@@ -2,10 +2,19 @@
 package crud
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 )
+
+func jsonString(v interface{}) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err.Error()
+	}
+	return string(data)
+}
 
 var Default = &CRUD{
 	Tag:       "json",
@@ -47,28 +56,40 @@ func (c *CRUD) Table(v interface{}) (table string) {
 	return
 }
 
-func FilterFieldCall(on, filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) (table string) {
+func FilterFieldCall(on, filter string, v interface{}, call func(fieldName, fieldFunc string, field reflect.StructField, value interface{})) (table string) {
 	table = Default.FilterFieldCall(on, filter, v, call)
 	return
 }
 
-func (c *CRUD) FilterFieldCall(on, filter string, v interface{}, call func(name string, field reflect.StructField, value interface{})) (table string) {
+func (c *CRUD) FilterFieldCall(on, filter string, v interface{}, call func(fieldName, fieldFunc string, field reflect.StructField, value interface{})) (table string) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	if reflectType.Kind() != reflect.Struct {
-		call(filter, reflect.StructField{}, v)
+		filterParts := strings.SplitN(strings.Trim(strings.TrimSpace(strings.SplitN(filter, "#", 2)[0]), ")"), "(", 2)
+		fieldName := filterParts[0]
+		fieldFunc := ""
+		if len(filterParts) > 1 {
+			fieldName = filterParts[1]
+			fieldFunc = filterParts[0]
+		}
+		call(fieldName, fieldFunc, reflect.StructField{}, v)
 		return
 	}
-	var inc, exc string
+	var fieldAll = map[string]string{}
+	var isExc = false
 	var incNil, incZero bool
 	if len(filter) > 0 {
 		filter = strings.TrimSpace(filter)
 		parts := strings.SplitN(filter, "#", 2)
+		isExc = strings.HasPrefix(parts[0], "^")
 		if len(parts[0]) > 0 {
-			if strings.HasPrefix(parts[0], "^") {
-				exc = "," + strings.TrimPrefix(parts[0], "^") + ","
-			} else {
-				inc = "," + parts[0] + ","
+			for _, fieldItem := range strings.Split(strings.TrimPrefix(parts[0], "^"), ",") {
+				fieldParts := strings.SplitN(strings.Trim(strings.TrimSpace(fieldItem), ")"), "(", 2)
+				if len(fieldParts) > 1 {
+					fieldAll[fieldParts[1]] = fieldParts[0]
+				} else {
+					fieldAll[fieldParts[0]] = ""
+				}
 			}
 		}
 		if len(parts) > 1 && len(parts[1]) > 0 {
@@ -91,10 +112,7 @@ func (c *CRUD) FilterFieldCall(on, filter string, v interface{}, call func(name 
 		if len(fieldName) < 1 || fieldName == "-" {
 			continue
 		}
-		if len(inc) > 0 && !strings.Contains(inc, ","+fieldName+",") {
-			continue
-		}
-		if len(exc) > 0 && strings.Contains(exc, ","+fieldName+",") {
+		if _, ok := fieldAll[fieldName]; (isExc && ok) || (!isExc && len(fieldAll) > 0 && !ok) {
 			continue
 		}
 		if fieldKind == reflect.Ptr && checkValue.IsNil() && !incNil {
@@ -109,7 +127,7 @@ func (c *CRUD) FilterFieldCall(on, filter string, v interface{}, call func(name 
 		if c.NameConv != nil {
 			fieldName = c.NameConv(on, fieldName, fieldType)
 		}
-		call(fieldName, fieldType, fieldValue.Addr().Interface())
+		call(fieldName, fieldAll[fieldName], fieldType, fieldValue.Addr().Interface())
 	}
 	return
 }
@@ -262,13 +280,13 @@ func InsertArgs(v interface{}, filter string) (table string, fields, param []str
 }
 
 func (c *CRUD) InsertArgs(v interface{}, filter string) (table string, fields, param []string, args []interface{}) {
-	table = c.FilterFieldCall("insert", filter, v, func(name string, field reflect.StructField, value interface{}) {
+	table = c.FilterFieldCall("insert", filter, v, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
-		fields = append(fields, name)
+		fields = append(fields, fieldName)
 		param = append(param, fmt.Sprintf(c.ArgFormat, len(args)))
 	})
 	if c.Verbose {
-		c.Log("CRUD generate insert args by struct:%v,filter:%v, result is fields:%v,param:%v", reflect.TypeOf(v), filter, fields, param)
+		c.Log("CRUD generate insert args by struct:%v,filter:%v, result is fields:%v,param:%v,args:%v", reflect.TypeOf(v), filter, fields, param, jsonString(args))
 	}
 	return
 }
@@ -325,12 +343,12 @@ func UpdateArgs(v interface{}, filter string, args []interface{}) (table string,
 
 func (c *CRUD) UpdateArgs(v interface{}, filter string, args []interface{}) (table string, sets []string, args_ []interface{}) {
 	args_ = args
-	table = c.FilterFieldCall("update", filter, v, func(name string, field reflect.StructField, value interface{}) {
+	table = c.FilterFieldCall("update", filter, v, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		args_ = append(args_, value)
-		sets = append(sets, fmt.Sprintf("%v="+c.ArgFormat, name, len(args_)))
+		sets = append(sets, fmt.Sprintf("%v="+c.ArgFormat, fieldName, len(args_)))
 	})
 	if c.Verbose {
-		c.Log("CRUD generate update args by struct:%v,filter:%v, result is sets:%v", reflect.TypeOf(v), filter, sets)
+		c.Log("CRUD generate update args by struct:%v,filter:%v, result is sets:%v,args:%v", reflect.TypeOf(v), filter, sets, jsonString(args_))
 	}
 	return
 }
@@ -344,7 +362,7 @@ func (c *CRUD) UpdateSQL(v interface{}, filter string, args []interface{}, suffi
 	table, sets, args_ := c.UpdateArgs(v, filter, args)
 	sql = fmt.Sprintf(`update %v set %v %v`, table, strings.Join(sets, ","), strings.Join(suffix, " "))
 	if c.Verbose {
-		c.Log("CRUD generate update sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
+		c.Log("CRUD generate update sql by struct:%v,filter:%v, result is sql:%v,args:%v", reflect.TypeOf(v), filter, sql, jsonString(args_))
 	}
 	return
 }
@@ -361,12 +379,12 @@ func (c *CRUD) Update(queryer, v interface{}, sets, where []string, sep string, 
 	affected, err = c.queryerExec(queryer, sql, args)
 	if err != nil {
 		if c.Verbose {
-			c.Log("CRUD update by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
+			c.Log("CRUD update by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
 		}
 		return
 	}
 	if c.Verbose {
-		c.Log("CRUD update by struct:%v,sql:%v, result is success affected:%v", reflect.TypeOf(v), sql, affected)
+		c.Log("CRUD update by struct:%v,sql:%v,args:%v, result is success affected:%v", reflect.TypeOf(v), sql, jsonString(args), affected)
 	}
 	return
 }
@@ -395,12 +413,12 @@ func (c *CRUD) UpdateFilter(queryer, v interface{}, filter string, where []strin
 	affected, err = c.queryerExec(queryer, sql, args)
 	if err != nil {
 		if c.Verbose {
-			c.Log("CRUD update filter by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
+			c.Log("CRUD update filter by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
 		}
 		return
 	}
 	if c.Verbose {
-		c.Log("CRUD update filter by struct:%v,sql:%v, result is success affected:%v", reflect.TypeOf(v), sql, affected)
+		c.Log("CRUD update filter by struct:%v,sql:%v,args:%v, result is success affected:%v", reflect.TypeOf(v), sql, jsonString(args), affected)
 	}
 	return
 }
@@ -431,12 +449,12 @@ func (c *CRUD) UpdateSimple(queryer, v interface{}, filter, suffix string, args 
 	affected, err = c.queryerExec(queryer, sql, args)
 	if err != nil {
 		if c.Verbose {
-			c.Log("CRUD update simple by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
+			c.Log("CRUD update simple by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
 		}
 		return
 	}
 	if c.Verbose {
-		c.Log("CRUD update simple by struct:%v,sql:%v, result is success affected:%v", reflect.TypeOf(v), sql, affected)
+		c.Log("CRUD update simple by struct:%v,sql:%v,args:%v, result is success affected:%v", reflect.TypeOf(v), sql, jsonString(args), affected)
 	}
 	return
 }
@@ -460,9 +478,13 @@ func QueryField(v interface{}, filter string) (table string, fields []string) {
 }
 
 func (c *CRUD) QueryField(v interface{}, filter string) (table string, fields []string) {
-	table = c.FilterFieldCall("query", filter, v, func(name string, field reflect.StructField, value interface{}) {
+	table = c.FilterFieldCall("query", filter, v, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		conv := field.Tag.Get("conv")
-		fields = append(fields, fmt.Sprintf("%v%v", name, conv))
+		if len(fieldFunc) > 0 {
+			fields = append(fields, fmt.Sprintf("%v(%v%v)", fieldFunc, fieldName, conv))
+		} else {
+			fields = append(fields, fmt.Sprintf("%v%v", fieldName, conv))
+		}
 	})
 	if c.Verbose {
 		c.Log("CRUD generate query field by struct:%v,filter:%v, result is fields:%v", reflect.TypeOf(v), filter, fields)
@@ -490,7 +512,7 @@ func ScanArgs(v interface{}, filter string) (args []interface{}) {
 }
 
 func (c *CRUD) ScanArgs(v interface{}, filter string) (args []interface{}) {
-	c.FilterFieldCall("scan", filter, v, func(name string, field reflect.StructField, value interface{}) {
+	c.FilterFieldCall("scan", filter, v, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 	})
 	return
@@ -543,7 +565,7 @@ func (c *CRUD) destSet(value reflect.Value, dests ...interface{}) (err error) {
 				break
 			}
 			i++
-			parts := strings.Split(v, ",")
+			parts := strings.Split(v, "#")
 			kvs := strings.SplitN(parts[0], ":", 2)
 			targetKey, xerr := valueField(kvs[0])
 			if xerr != nil {
@@ -571,8 +593,8 @@ func (c *CRUD) destSet(value reflect.Value, dests ...interface{}) (err error) {
 			} else {
 				destValue.SetMapIndex(targetKey, targetValue)
 			}
-		case reflect.Slice:
-			if destType.Elem() == value.Type() {
+		default:
+			if destKind == reflect.Slice && destType.Elem() == value.Type() {
 				destValue.Set(reflect.Append(destValue, value))
 				continue
 			}
@@ -589,7 +611,7 @@ func (c *CRUD) destSet(value reflect.Value, dests ...interface{}) (err error) {
 				err = fmt.Errorf("dest[%v] pattern is empty", i)
 				break
 			}
-			parts := strings.Split(v, ",")
+			parts := strings.Split(v, "#")
 			skipNil, skipZero := true, true
 			if len(parts) > 1 && parts[1] == "all" {
 				skipNil, skipZero = false, false
@@ -611,9 +633,13 @@ func (c *CRUD) destSet(value reflect.Value, dests ...interface{}) (err error) {
 			if checkValue.IsZero() && skipZero {
 				continue
 			}
-			destValue.Set(reflect.Append(reflect.Indirect(destValue), targetValue))
-		default:
-			err = fmt.Errorf("type %v is not supported", destKind)
+			if destKind == reflect.Slice && destType.Elem() == targetValue.Type() {
+				destValue.Set(reflect.Append(reflect.Indirect(destValue), targetValue))
+			} else if destType == targetValue.Type() {
+				destValue.Set(targetValue)
+			} else {
+				err = fmt.Errorf("not supported to set %v=>%v", targetValue.Type(), destType)
+			}
 		}
 		if err != nil {
 			break
@@ -657,13 +683,13 @@ func (c *CRUD) Query(queryer, v interface{}, filter, sql string, args []interfac
 	rows, err := c.queryerQuery(queryer, sql, args)
 	if err != nil {
 		if c.Verbose {
-			c.Log("CRUD query by struct:%v,filter:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, err)
+			c.Log("CRUD query by struct:%v,filter:%v,sql:%v,args:%v result is fail:%v", reflect.TypeOf(v), filter, sql, jsonString(args), err)
 		}
 		return
 	}
 	defer rows.Close()
 	if c.Verbose {
-		c.Log("CRUD query by struct:%v,filter:%v,sql:%v, result is success", reflect.TypeOf(v), filter, sql)
+		c.Log("CRUD query by struct:%v,filter:%v,sql:%v,args:%v result is success", reflect.TypeOf(v), filter, sql, jsonString(args))
 	}
 	err = c.Scan(rows, v, filter, dest...)
 	return
@@ -727,12 +753,12 @@ func (c *CRUD) QueryRow(queryer, v interface{}, filter, sql string, args []inter
 	err = c.ScanRow(c.queryerQueryRow(queryer, sql, args), v, filter, dest...)
 	if err != nil {
 		if c.Verbose {
-			c.Log("CRUD query by struct:%v,filter:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, err)
+			c.Log("CRUD query by struct:%v,filter:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, jsonString(args), err)
 		}
 		return
 	}
 	if c.Verbose {
-		c.Log("CRUD query by struct:%v,filter:%v,sql:%v, result is success", reflect.TypeOf(v), filter, sql)
+		c.Log("CRUD query by struct:%v,filter:%v,sql:%v,args:%v, result is success", reflect.TypeOf(v), filter, sql, jsonString(args))
 	}
 	return
 }
@@ -757,5 +783,68 @@ func QuerySimpleRow(queryer, v interface{}, filter string, suffix string, args [
 func (c *CRUD) QuerySimpleRow(queryer, v interface{}, filter string, suffix string, args []interface{}, dest ...interface{}) (err error) {
 	sql := c.QuerySQL(v, filter) + " " + suffix
 	err = c.QueryRow(queryer, v, filter, sql, args, dest...)
+	return
+}
+
+func CountSQL(v interface{}, filter string, suffix ...string) (sql string) {
+	sql = Default.CountSQL(v, filter, suffix...)
+	return
+}
+
+func (c *CRUD) CountSQL(v interface{}, filter string, suffix ...string) (sql string) {
+	var table string
+	var fields []string
+	if len(filter) < 1 || filter == "*" || filter == "count(*)" || filter == "count(*)#all" {
+		table = c.Table(v)
+		fields = []string{"count(*)"}
+	} else {
+		table, fields = c.QueryField(v, filter)
+	}
+	sql = fmt.Sprintf(`select %v from %v %v`, strings.Join(fields, ","), table, strings.Join(suffix, " "))
+	if c.Verbose {
+		c.Log("CRUD generate count sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
+	}
+	return
+}
+
+func Count(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.Count(queryer, v, filter, sql, args, dest...)
+	return
+}
+
+func (c *CRUD) Count(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = c.ScanRow(c.queryerQueryRow(queryer, sql, args), v, filter, dest...)
+	if err != nil {
+		if c.Verbose {
+			c.Log("CRUD count by struct:%v,filter:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, jsonString(args), err)
+		}
+		return
+	}
+	if c.Verbose {
+		c.Log("CRUD count by struct:%v,filter:%v,sql:%v,args:%v, result is success", reflect.TypeOf(v), filter, sql, jsonString(args))
+	}
+	return
+}
+
+func CountFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.CountFilter(queryer, v, filter, where, sep, args, dest...)
+	return
+}
+
+func (c *CRUD) CountFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
+	sql := c.CountSQL(v, filter)
+	sql = c.JoinWhere(sql, where, sep)
+	err = c.Count(queryer, v, filter, sql, args, dest...)
+	return
+}
+
+func CountSimple(queryer, v interface{}, filter, suffix string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.CountSimple(queryer, v, filter, suffix, args, dest...)
+	return
+}
+
+func (c *CRUD) CountSimple(queryer, v interface{}, filter, suffix string, args []interface{}, dest ...interface{}) (err error) {
+	sql := c.CountSQL(v, filter, suffix)
+	err = c.Count(queryer, v, filter, sql, args, dest...)
 	return
 }

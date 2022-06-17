@@ -16,14 +16,6 @@ func init() {
 	Default.Verbose = true
 }
 
-func JSON(v interface{}) string {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return err.Error()
-	}
-	return string(data)
-}
-
 type PoolQueryer struct {
 	ExecErr      error
 	ExecAffected int64
@@ -209,6 +201,11 @@ type Simple struct {
 	XX         string    `json:"-"`
 }
 
+func TestJsonString(t *testing.T) {
+	jsonString(t)
+	jsonString(t.Error)
+}
+
 func TestQueryer(t *testing.T) {
 	var err error
 	var row Row
@@ -280,7 +277,7 @@ func TestField(t *testing.T) {
 		t.Error("error")
 		return
 	}
-	table = FilterFieldCall("test", "#all", simple, func(name string, field reflect.StructField, value interface{}) {
+	table = FilterFieldCall("test", "#all", simple, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 	})
 	if table != "crud_simple" {
 		t.Error("error")
@@ -310,7 +307,7 @@ func TestInsert(t *testing.T) {
 	fmt.Printf("   --->%v\n", insertArg1)
 	if strings.Contains(insertSQL1, "update_time") {
 		err = fmt.Errorf("error")
-		t.Error(err)
+		t.Errorf("%v,%v", err, insertSQL1)
 		return
 	}
 	table, fileds, param, args := InsertArgs(simple, "")
@@ -353,7 +350,7 @@ func TestUpdate(t *testing.T) {
 	var where []string
 	var args []interface{}
 
-	updateSQL, args = UpdateSQL(simple, "title,image,update_time,status", nil)
+	updateSQL, args = UpdateSQL(simple, "title,image,update_time,status#all", nil)
 
 	if strings.Contains(updateSQL, "tid") {
 		err = fmt.Errorf("error")
@@ -424,6 +421,12 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+func TestQueryField(t *testing.T) {
+	simple := &Simple{}
+	fmt.Println(QueryField(simple, "count(tid)#all"))
+	fmt.Println(QueryField(int64(0), "count(tid)#all"))
+}
+
 func TestSearch(t *testing.T) {
 	var err error
 	var userID int64
@@ -478,9 +481,9 @@ func TestQuery(t *testing.T) {
 		"sql", []interface{}{"arg"},
 		&simpleList, &simple,
 		&userIDs0, "user_id",
-		&userIDs1, "user_id,all",
+		&userIDs1, "user_id#all",
 		&images0, "image",
-		&images1, "image,all",
+		&images1, "image#all",
 		&simples0, "tid",
 		&simples1, "user_id",
 		&userIDm0, "tid:user_id",
@@ -592,6 +595,60 @@ func TestQuery(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 		return
+	}
+}
+
+func TestCount(t *testing.T) {
+	var err error
+	simple := &Simple{}
+	{
+		if countSQL := CountSQL(simple, ""); !strings.Contains(countSQL, "count(*)") {
+			t.Errorf("err:%v", countSQL)
+			return
+		}
+		if countSQL := CountSQL(simple, "*"); !strings.Contains(countSQL, "count(*)") {
+			t.Errorf("err:%v", countSQL)
+			return
+		}
+		if countSQL := CountSQL(simple, "count(*)"); !strings.Contains(countSQL, "count(*)") {
+			t.Errorf("err:%v", countSQL)
+			return
+		}
+		if countSQL := CountSQL(simple, "count(*)#all"); !strings.Contains(countSQL, "count(*)") {
+			t.Errorf("err:%v", countSQL)
+			return
+		}
+		if countSQL := CountSQL(simple, "count(tid)#all"); !strings.Contains(countSQL, "count(tid)") {
+			t.Errorf("err:%v", countSQL)
+			return
+		}
+	}
+	{
+		var countVal int64
+		err = Count(NewPoolQueryer(), simple, "tid#all", "select count(*) from crud_simple", nil, &countVal, "tid")
+		if err != nil || countVal < 1 {
+			t.Error(err)
+			return
+		}
+		fmt.Println(countVal)
+	}
+	{
+		var countVal int64
+		err = CountFilter(NewPoolQueryer(), simple, "count(tid)#all", nil, "", nil, &countVal, "tid")
+		if err != nil || countVal < 1 {
+			t.Error(err)
+			return
+		}
+		fmt.Println(countVal)
+	}
+	{
+		var countVal int64
+		err = CountSimple(NewPoolQueryer(), simple, "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fmt.Println(countVal)
 	}
 }
 
@@ -822,6 +879,39 @@ func TestError(t *testing.T) {
 		)
 		if err == nil {
 			t.Error("not error")
+			return
+		}
+	}
+	{ //count error
+		var countValue int64
+		simple := &Simple{}
+		pool := NewPoolQueryer()
+
+		//
+		pool.QueryMode = "no"
+		err = CountSimple(pool, simple, "count(tid)#all", "", nil, &countValue, "tid")
+		if err != Default.ErrNoRows {
+			t.Error(err)
+			return
+		}
+
+		//
+		pool.QueryErr = fmt.Errorf("error")
+		err = CountSimple(pool, simple, "count(tid)#all", "", nil, &countValue, "tid")
+		if err == nil {
+			t.Error(err)
+			return
+		}
+	}
+	{ //dest error
+		var countValue int64
+		simple := &Simple{}
+		pool := NewPoolQueryer()
+
+		//
+		err = CountSimple(pool, simple, "count(tid)#all", "", nil, &countValue, "title#all")
+		if err == nil || !strings.Contains(err.Error(), "not supported to set") {
+			t.Error(err)
 			return
 		}
 	}
