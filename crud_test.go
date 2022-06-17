@@ -317,6 +317,19 @@ func TestFilterField(t *testing.T) {
 		}
 	}
 	{
+		v := MetaWith(simple, int64(0))
+		table = Table(v)
+		if table != "crud_simple" {
+			t.Error("error")
+			return
+		}
+		table, fields := QueryField(v, "tid#all")
+		if table != "crud_simple" || len(fields) != 1 {
+			t.Error("error")
+			return
+		}
+	}
+	{
 		table = FilterFieldCall("test", simple, "#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		})
 		if table != "crud_simple" {

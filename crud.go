@@ -32,8 +32,12 @@ func NewValue(v interface{}) (value reflect.Value) {
 	return
 }
 
-func MetaWith(table string, fields ...interface{}) (v []interface{}) {
-	v = append(v, TableName(table))
+func MetaWith(o interface{}, fields ...interface{}) (v []interface{}) {
+	strName, ok := o.(string)
+	if !ok {
+		strName = Table(o)
+	}
+	v = append(v, TableName(strName))
 	v = append(v, fields...)
 	return
 }
