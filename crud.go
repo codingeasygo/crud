@@ -16,6 +16,22 @@ func jsonString(v interface{}) string {
 	return string(data)
 }
 
+func NewValue(v interface{}) (value reflect.Value) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
+	value = reflect.New(reflectType)
+	if reflectType.Kind() != reflect.Slice {
+		return
+	}
+	value = reflect.Indirect(value)
+	for i := 0; i < reflectValue.Len(); i++ {
+		v := reflectValue.Index(i)
+		item := reflect.New(v.Elem().Type())
+		value.Set(reflect.Append(value, item))
+	}
+	return
+}
+
 var Default = &CRUD{
 	Tag:       "json",
 	ArgFormat: "$%v",
@@ -25,6 +41,7 @@ var Default = &CRUD{
 
 type NameConv func(on, name string, field reflect.StructField) string
 type LogF func(format string, args ...interface{})
+type TableName string
 
 type CRUD struct {
 	Tag       string
@@ -56,21 +73,44 @@ func (c *CRUD) Table(v interface{}) (table string) {
 	return
 }
 
-func FilterFieldCall(on, filter string, v interface{}, call func(fieldName, fieldFunc string, field reflect.StructField, value interface{})) (table string) {
-	table = Default.FilterFieldCall(on, filter, v, call)
+func FilterFieldCall(on string, v interface{}, filter string, call func(fieldName, fieldFunc string, field reflect.StructField, value interface{})) (table string) {
+	table = Default.FilterFieldCall(on, v, filter, call)
 	return
 }
 
-func (c *CRUD) FilterFieldCall(on, filter string, v interface{}, call func(fieldName, fieldFunc string, field reflect.StructField, value interface{})) (table string) {
+func (c *CRUD) FilterFieldCall(on string, v interface{}, filter string, call func(fieldName, fieldFunc string, field reflect.StructField, value interface{})) (table string) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
+	if v, ok := v.([]interface{}); ok {
+		filterFields := strings.Split(strings.TrimSpace(strings.SplitN(filter, "#", 2)[0]), ",")
+		offset := 0
+		for _, f := range v {
+			if tableName, ok := f.(TableName); ok {
+				table = string(tableName)
+				continue
+			}
+			if offset >= len(filterFields) {
+				panic(fmt.Sprintf("meta v[%v] is not found on filter", offset))
+			}
+			fieldParts := strings.SplitN(strings.Trim(filterFields[offset], ")"), "(", 2)
+			fieldName := fieldParts[0]
+			fieldFunc := ""
+			if len(fieldParts) > 1 {
+				fieldName = fieldParts[1]
+				fieldFunc = fieldParts[0]
+			}
+			call(fieldName, fieldFunc, reflect.StructField{}, f)
+			offset++
+		}
+		return
+	}
 	if reflectType.Kind() != reflect.Struct {
-		filterParts := strings.SplitN(strings.Trim(strings.TrimSpace(strings.SplitN(filter, "#", 2)[0]), ")"), "(", 2)
-		fieldName := filterParts[0]
+		fieldParts := strings.SplitN(strings.Trim(strings.TrimSpace(strings.SplitN(filter, "#", 2)[0]), ")"), "(", 2)
+		fieldName := fieldParts[0]
 		fieldFunc := ""
-		if len(filterParts) > 1 {
-			fieldName = filterParts[1]
-			fieldFunc = filterParts[0]
+		if len(fieldParts) > 1 {
+			fieldName = fieldParts[1]
+			fieldFunc = fieldParts[0]
 		}
 		call(fieldName, fieldFunc, reflect.StructField{}, v)
 		return
@@ -280,7 +320,7 @@ func InsertArgs(v interface{}, filter string) (table string, fields, param []str
 }
 
 func (c *CRUD) InsertArgs(v interface{}, filter string) (table string, fields, param []string, args []interface{}) {
-	table = c.FilterFieldCall("insert", filter, v, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+	table = c.FilterFieldCall("insert", v, filter, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 		fields = append(fields, fieldName)
 		param = append(param, fmt.Sprintf(c.ArgFormat, len(args)))
@@ -343,7 +383,7 @@ func UpdateArgs(v interface{}, filter string, args []interface{}) (table string,
 
 func (c *CRUD) UpdateArgs(v interface{}, filter string, args []interface{}) (table string, sets []string, args_ []interface{}) {
 	args_ = args
-	table = c.FilterFieldCall("update", filter, v, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+	table = c.FilterFieldCall("update", v, filter, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		args_ = append(args_, value)
 		sets = append(sets, fmt.Sprintf("%v="+c.ArgFormat, fieldName, len(args_)))
 	})
@@ -478,7 +518,7 @@ func QueryField(v interface{}, filter string) (table string, fields []string) {
 }
 
 func (c *CRUD) QueryField(v interface{}, filter string) (table string, fields []string) {
-	table = c.FilterFieldCall("query", filter, v, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+	table = c.FilterFieldCall("query", v, filter, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		conv := field.Tag.Get("conv")
 		if len(fieldFunc) > 0 {
 			fields = append(fields, fmt.Sprintf("%v(%v%v)", fieldFunc, fieldName, conv))
@@ -512,14 +552,35 @@ func ScanArgs(v interface{}, filter string) (args []interface{}) {
 }
 
 func (c *CRUD) ScanArgs(v interface{}, filter string) (args []interface{}) {
-	c.FilterFieldCall("scan", filter, v, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+	c.FilterFieldCall("scan", v, filter, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 	})
 	return
 }
 
-func (c *CRUD) destSet(value reflect.Value, dests ...interface{}) (err error) {
+func (c *CRUD) destSet(value reflect.Value, filter string, dests ...interface{}) (err error) {
 	valueField := func(key string) (v reflect.Value, e error) {
+		if _, ok := value.Interface().([]interface{}); ok {
+			filterFields := strings.Split(strings.TrimSpace(strings.SplitN(filter, "#", 2)[0]), ",")
+			indexField := -1
+			for i, filterField := range filterFields {
+				fieldParts := strings.SplitN(strings.Trim(filterField, ")"), "(", 2)
+				fieldName := fieldParts[0]
+				if len(fieldParts) > 1 {
+					fieldName = fieldParts[1]
+				}
+				if fieldName == key {
+					indexField = i
+					break
+				}
+			}
+			if indexField < 0 {
+				e = fmt.Errorf("field %v is not exists", key)
+				return
+			}
+			v = reflect.Indirect(value.Index(indexField).Elem())
+			return
+		}
 		targetValue := reflect.Indirect(value)
 		targetType := targetValue.Type()
 		k := targetValue.NumField()
@@ -638,7 +699,7 @@ func (c *CRUD) destSet(value reflect.Value, dests ...interface{}) (err error) {
 			} else if destType == targetValue.Type() {
 				destValue.Set(targetValue)
 			} else {
-				err = fmt.Errorf("not supported to set %v=>%v", targetValue.Type(), destType)
+				err = fmt.Errorf("not supported on dests[%v] to set %v=>%v", i-1, targetValue.Type(), destType)
 			}
 		}
 		if err != nil {
@@ -655,10 +716,8 @@ func Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err err
 
 func (c *CRUD) Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
 	isPtr := reflect.ValueOf(v).Kind() == reflect.Ptr
-	reflectValue := reflect.Indirect(reflect.ValueOf(v))
-	reflectType := reflectValue.Type()
 	for rows.Next() {
-		value := reflect.New(reflectType)
+		value := NewValue(v)
 		err = rows.Scan(c.ScanArgs(value.Interface(), filter)...)
 		if err != nil {
 			break
@@ -666,7 +725,7 @@ func (c *CRUD) Scan(rows Rows, v interface{}, filter string, dest ...interface{}
 		if !isPtr {
 			value = reflect.Indirect(value)
 		}
-		err = c.destSet(value, dest...)
+		err = c.destSet(value, filter, dest...)
 		if err != nil {
 			break
 		}
@@ -727,9 +786,7 @@ func ScanRow(row Row, v interface{}, filter string, dest ...interface{}) (err er
 
 func (c *CRUD) ScanRow(row Row, v interface{}, filter string, dest ...interface{}) (err error) {
 	isPtr := reflect.ValueOf(v).Kind() == reflect.Ptr
-	reflectValue := reflect.Indirect(reflect.ValueOf(v))
-	reflectType := reflectValue.Type()
-	value := reflect.New(reflectType)
+	value := NewValue(v)
 	err = row.Scan(c.ScanArgs(value.Interface(), filter)...)
 	if err != nil {
 		return
@@ -737,7 +794,7 @@ func (c *CRUD) ScanRow(row Row, v interface{}, filter string, dest ...interface{
 	if !isPtr {
 		value = reflect.Indirect(value)
 	}
-	err = c.destSet(value, dest...)
+	err = c.destSet(value, filter, dest...)
 	if err != nil {
 		return
 	}

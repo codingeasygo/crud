@@ -160,7 +160,12 @@ func (t *TestRows) Scan(dests ...interface{}) (err error) {
 		values := t.Values[t.Index]
 		for i, dest := range dests {
 			destValue := reflect.Indirect(reflect.ValueOf(dest))
-			destValue.Set(reflect.Indirect(reflect.ValueOf(values[i])))
+			src := reflect.ValueOf(values[i])
+			if destValue.Type() == src.Type() {
+				destValue.Set(reflect.ValueOf(values[i]))
+			} else {
+				destValue.Set(reflect.Indirect(reflect.ValueOf(values[i])))
+			}
 		}
 	}
 	return
@@ -262,7 +267,26 @@ func TestQueryer(t *testing.T) {
 	}()
 }
 
-func TestField(t *testing.T) {
+func TestNewValue(t *testing.T) {
+	{
+		value := NewValue(&Simple{})
+		if _, ok := value.Interface().(*Simple); !ok {
+			t.Error("error")
+			return
+		}
+		fmt.Println(value)
+	}
+	{
+		value := NewValue([]interface{}{int64(0)})
+		if _, ok := value.Interface().([]interface{}); !ok {
+			t.Error("error")
+			return
+		}
+		fmt.Println(value)
+	}
+}
+
+func TestFilterField(t *testing.T) {
 	table := ""
 	title := "test"
 	simple := &Simple{
@@ -272,16 +296,84 @@ func TestField(t *testing.T) {
 		Image:  &title,
 		Status: SimpleStatusNormal,
 	}
-	table = Table(simple)
-	if table != "crud_simple" {
-		t.Error("error")
-		return
+	{
+		table = Table(simple)
+		if table != "crud_simple" {
+			t.Error("error")
+			return
+		}
 	}
-	table = FilterFieldCall("test", "#all", simple, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
-	})
-	if table != "crud_simple" {
-		t.Error("error")
-		return
+	{
+		table = FilterFieldCall("test", simple, "#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+		})
+		if table != "crud_simple" {
+			t.Error("error")
+			return
+		}
+	}
+	{
+		table = FilterFieldCall("test", int64(11), "tid#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+			if v, ok := value.(int64); !ok || v != 11 {
+				panic("error")
+			}
+		})
+		if table != "" {
+			t.Error("error")
+			return
+		}
+		table = FilterFieldCall("test", int64(11), "count(tid)#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+			if v, ok := value.(int64); !ok || v != 11 {
+				panic("error")
+			}
+		})
+		if table != "" {
+			t.Error("error")
+			return
+		}
+	}
+	{
+		table = FilterFieldCall("test", []interface{}{int64(11)}, "tid#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+			if v, ok := value.(int64); !ok || v != 11 {
+				panic("error")
+			}
+		})
+		if table != "" {
+			t.Error("error")
+			return
+		}
+		table = FilterFieldCall("test", []interface{}{TableName("crud_simple"), int64(11), string("abc")}, "tid,title#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+			if v, ok := value.(int64); ok && v != 11 {
+				panic("error")
+			}
+			if v, ok := value.(string); ok && v != "abc" {
+				panic("error")
+			}
+		})
+		if table != "crud_simple" {
+			t.Error("error")
+			return
+		}
+		table = FilterFieldCall("test", []interface{}{TableName("crud_simple"), int64(11), string("abc")}, "count(tid),title#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+			if v, ok := value.(int64); ok && v != 11 {
+				panic("error")
+			}
+			if v, ok := value.(string); ok && v != "abc" {
+				panic("error")
+			}
+		})
+		if table != "crud_simple" {
+			t.Error("error")
+			return
+		}
+	}
+	{ //error
+		func() {
+			defer func() {
+				recover()
+			}()
+			FilterFieldCall("test", []interface{}{TableName("crud_simple"), int64(11), string("abc")}, "count(tid)", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+			})
+		}()
 	}
 }
 
@@ -650,6 +742,51 @@ func TestCount(t *testing.T) {
 		}
 		fmt.Println(countVal)
 	}
+	{
+		var countVal *int64
+		err = CountSimple(NewPoolQueryer(), []interface{}{countVal}, "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fmt.Println(*countVal)
+	}
+	{
+		var typeVal *string
+		err = QuerySimpleRow(NewPoolQueryer(), []interface{}{int64(0), int64(0), typeVal}, "tid,user_id,type#all", "where tid>$1", []interface{}{1}, &typeVal, "type")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fmt.Println(*typeVal)
+	}
+	{
+		var countVal int64
+		err = QuerySimpleRow(NewPoolQueryer(), []interface{}{countVal}, "tid#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fmt.Println(countVal)
+	}
+	{
+		var typeVal string
+		err = QuerySimpleRow(NewPoolQueryer(), []interface{}{int64(0), int64(0), typeVal}, "tid,user_id,type#all", "where tid>$1", []interface{}{1}, &typeVal, "type")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fmt.Println(typeVal)
+	}
+	{
+		var countVal int64
+		err = CountSimple(NewPoolQueryer(), []interface{}{countVal}, "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fmt.Println(countVal)
+	}
 }
 
 func TestScan(t *testing.T) {
@@ -910,7 +1047,13 @@ func TestError(t *testing.T) {
 
 		//
 		err = CountSimple(pool, simple, "count(tid)#all", "", nil, &countValue, "title#all")
-		if err == nil || !strings.Contains(err.Error(), "not supported to set") {
+		if err == nil || !strings.Contains(err.Error(), "not supported on dests[0] to set") {
+			t.Error(err)
+			return
+		}
+		//
+		err = CountSimple(pool, []interface{}{int64(0)}, "count(tid)#all", "", nil, &countValue, "none#all")
+		if err == nil {
 			t.Error(err)
 			return
 		}
