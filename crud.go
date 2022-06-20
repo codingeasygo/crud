@@ -8,6 +8,14 @@ import (
 	"strings"
 )
 
+type NilChecker interface {
+	IsNil() bool
+}
+
+type ZeroChecker interface {
+	IsZero() bool
+}
+
 func jsonString(v interface{}) string {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -95,6 +103,30 @@ func (c *CRUD) Table(v interface{}) (table string) {
 	return
 }
 
+func (c *CRUD) checkValue(val reflect.Value, incNil, incZero bool) bool {
+	if !val.IsValid() {
+		return incNil
+	}
+	v := val.Interface()
+	if c, ok := v.(NilChecker); ok {
+		return !c.IsNil() || incNil
+	}
+	if c, ok := v.(ZeroChecker); ok {
+		return !c.IsZero() || incZero
+	}
+	kind := val.Kind()
+	if kind == reflect.Ptr && val.IsNil() && !incNil {
+		return false
+	}
+	if kind == reflect.Ptr && !val.IsNil() {
+		val = reflect.Indirect(val)
+	}
+	if (!val.IsValid() || val.IsZero()) && !incZero {
+		return false
+	}
+	return true
+}
+
 func FilterFieldCall(on string, v interface{}, filter string, call func(fieldName, fieldFunc string, field reflect.StructField, value interface{})) (table string) {
 	table = Default.FilterFieldCall(on, v, filter, call)
 	return
@@ -169,21 +201,13 @@ func (c *CRUD) FilterFieldCall(on string, v interface{}, filter string, call fun
 			}
 		}
 		fieldName := strings.SplitN(fieldType.Tag.Get(c.Tag), ",", 2)[0]
-		fieldKind := fieldValue.Kind()
-		checkValue := fieldValue
 		if len(fieldName) < 1 || fieldName == "-" {
 			continue
 		}
 		if _, ok := fieldAll[fieldName]; (isExc && ok) || (!isExc && len(fieldAll) > 0 && !ok) {
 			continue
 		}
-		if fieldKind == reflect.Ptr && checkValue.IsNil() && !incNil {
-			continue
-		}
-		if fieldKind == reflect.Ptr && !checkValue.IsNil() {
-			checkValue = reflect.Indirect(checkValue)
-		}
-		if checkValue.IsZero() && !incZero {
+		if !c.checkValue(fieldValue, incNil, incZero) {
 			continue
 		}
 		if c.NameConv != nil {
@@ -194,74 +218,125 @@ func (c *CRUD) FilterFieldCall(on string, v interface{}, filter string, call fun
 	return
 }
 
-func AppendInsert(fields, param []string, args []interface{}, ok bool, formats ...interface{}) (fields_, param_ []string, args_ []interface{}) {
-	fields_, param_, args_ = Default.AppendInsert(fields, param, args, ok, formats...)
+func FilterFormatCall(formats string, args []interface{}, call func(format string, arg interface{})) {
+	Default.FilterFormatCall(formats, args, call)
+}
+
+func (c *CRUD) FilterFormatCall(formats string, args []interface{}, call func(format string, arg interface{})) {
+	formatParts := strings.SplitN(formats, "#", 2)
+	var incNil, incZero bool
+	if len(formatParts) > 1 && len(formatParts[1]) > 0 {
+		incNil = strings.Contains(","+formatParts[1]+",", ",nil,") || strings.Contains(","+formatParts[1]+",", ",all,")
+		incZero = strings.Contains(","+formatParts[1]+",", ",zero,") || strings.Contains(","+formatParts[1]+",", ",all,")
+	}
+	formatList := strings.Split(formatParts[0], ",")
+	if len(formatList) != len(args) {
+		panic(fmt.Sprintf("count formats=%v  is not equal to args=%v", len(formatList), len(args)))
+	}
+	for i, format := range formatList {
+		arg := args[i]
+		if !c.checkValue(reflect.ValueOf(arg), incNil, incZero) {
+			continue
+		}
+		call(format, arg)
+	}
+}
+
+func (c *CRUD) Sprintf(format string, v int) string {
+	args := []interface{}{}
+	arg := fmt.Sprintf("%d", v)
+	n := strings.Count(format, c.ArgFormat)
+	for i := 0; i < n; i++ {
+		args = append(args, arg)
+	}
+	return fmt.Sprintf(format, args...)
+}
+
+func AppendInsert(fields, param []string, args []interface{}, ok bool, format string, v interface{}) (fields_, param_ []string, args_ []interface{}) {
+	fields_, param_, args_ = Default.AppendInsert(fields, param, args, ok, format, v)
 	return
 }
 
-func (c *CRUD) AppendInsert(fields, param []string, args []interface{}, ok bool, formats ...interface{}) (fields_, param_ []string, args_ []interface{}) {
+func (c *CRUD) AppendInsert(fields, param []string, args []interface{}, ok bool, format string, v interface{}) (fields_, param_ []string, args_ []interface{}) {
 	fields_, param_, args_ = fields, param, args
 	if ok {
-		n := len(formats) / 2
-		for i := 0; i < n; i++ {
-			args_ = append(args_, formats[i*2+1])
-			parts := strings.SplitN(formats[i*2].(string), "=", 2)
-			param_ = append(param_, fmt.Sprintf(parts[1], len(args_)))
-			fields_ = append(fields_, parts[0])
-		}
+		args_ = append(args_, v)
+		parts := strings.SplitN(format, "=", 2)
+		param_ = append(param_, c.Sprintf(parts[1], len(args_)))
+		fields_ = append(fields_, parts[0])
 	}
 	return
 }
 
-func AppendSet(sets []string, args []interface{}, ok bool, formats ...interface{}) (sets_ []string, args_ []interface{}) {
-	sets_, args_ = Default.AppendSet(sets, args, ok, formats...)
+func AppendInsertf(fields, param []string, args []interface{}, formats string, v ...interface{}) (fields_, param_ []string, args_ []interface{}) {
+	fields_, param_, args_ = Default.AppendInsertf(fields, param, args, formats, v...)
 	return
 }
 
-func (c *CRUD) AppendSet(sets []string, args []interface{}, ok bool, formats ...interface{}) (sets_ []string, args_ []interface{}) {
+func (c *CRUD) AppendInsertf(fields, param []string, args []interface{}, formats string, v ...interface{}) (fields_, param_ []string, args_ []interface{}) {
+	fields_, param_, args_ = fields, param, args
+	c.FilterFormatCall(formats, v, func(format string, arg interface{}) {
+		args_ = append(args_, arg)
+		parts := strings.SplitN(format, "=", 2)
+		param_ = append(param_, c.Sprintf(parts[1], len(args_)))
+		fields_ = append(fields_, parts[0])
+	})
+	return
+}
+
+func AppendSet(sets []string, args []interface{}, ok bool, format string, v interface{}) (sets_ []string, args_ []interface{}) {
+	sets_, args_ = Default.AppendSet(sets, args, ok, format, v)
+	return
+}
+
+func (c *CRUD) AppendSet(sets []string, args []interface{}, ok bool, format string, v interface{}) (sets_ []string, args_ []interface{}) {
 	sets_, args_ = sets, args
 	if ok {
-		n := len(formats) / 2
-		for i := 0; i < n; i++ {
-			args_ = append(args_, formats[i*2+1])
-			sets_ = append(sets_, fmt.Sprintf(formats[i*2].(string), len(args_)))
-		}
+		args_ = append(args_, v)
+		sets_ = append(sets_, c.Sprintf(format, len(args_)))
 	}
 	return
 }
 
-func AppendWhere(where []string, args []interface{}, ok bool, formats ...interface{}) (where_ []string, args_ []interface{}) {
-	where_, args_ = Default.AppendWhere(where, args, ok, formats...)
+func AppendSetf(sets []string, args []interface{}, formats string, v ...interface{}) (sets_ []string, args_ []interface{}) {
+	sets_, args_ = Default.AppendSetf(sets, args, formats, v...)
 	return
 }
 
-func (c *CRUD) AppendWhere(where []string, args []interface{}, ok bool, formats ...interface{}) (where_ []string, args_ []interface{}) {
-	where_, args_ = where, args
-	if ok {
-		n := len(formats) / 2
-		for i := 0; i < n; i++ {
-			args_ = append(args_, formats[i*2+1])
-			where_ = append(where_, fmt.Sprintf(formats[i*2].(string), len(args_)))
-		}
-	}
+func (c *CRUD) AppendSetf(sets []string, args []interface{}, formats string, v ...interface{}) (sets_ []string, args_ []interface{}) {
+	sets_, args_ = sets, args
+	c.FilterFormatCall(formats, v, func(format string, arg interface{}) {
+		args_ = append(args_, arg)
+		sets_ = append(sets_, c.Sprintf(format, len(args_)))
+	})
 	return
 }
 
-func AppendWhereN(where []string, args []interface{}, ok bool, format string, n int, v interface{}) (where_ []string, args_ []interface{}) {
-	where_, args_ = Default.AppendWhereN(where, args, ok, format, n, v)
+func AppendWhere(where []string, args []interface{}, ok bool, format string, v interface{}) (where_ []string, args_ []interface{}) {
+	where_, args_ = Default.AppendWhere(where, args, ok, format, v)
 	return
 }
 
-func (c *CRUD) AppendWhereN(where []string, args []interface{}, ok bool, format string, n int, v interface{}) (where_ []string, args_ []interface{}) {
+func (c *CRUD) AppendWhere(where []string, args []interface{}, ok bool, format string, v interface{}) (where_ []string, args_ []interface{}) {
 	where_, args_ = where, args
 	if ok {
 		args_ = append(args_, v)
-		fargs := []interface{}{}
-		for i := 0; i < n; i++ {
-			fargs = append(fargs, fmt.Sprintf("%v", len(args_)))
-		}
-		where_ = append(where_, fmt.Sprintf(format, fargs...))
+		where_ = append(where_, c.Sprintf(format, len(args_)))
 	}
+	return
+}
+
+func AppendWheref(where []string, args []interface{}, format string, v ...interface{}) (where_ []string, args_ []interface{}) {
+	where_, args_ = Default.AppendWheref(where, args, format, v...)
+	return
+}
+
+func (c *CRUD) AppendWheref(where []string, args []interface{}, formats string, v ...interface{}) (where_ []string, args_ []interface{}) {
+	where_, args_ = where, args
+	c.FilterFormatCall(formats, v, func(format string, arg interface{}) {
+		args_ = append(args_, arg)
+		where_ = append(where_, c.Sprintf(format, len(args_)))
+	})
 	return
 }
 

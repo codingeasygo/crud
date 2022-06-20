@@ -438,6 +438,86 @@ func TestFilterField(t *testing.T) {
 	}
 }
 
+type IsNilArray []string
+
+type IsZeroArray []string
+
+func (s IsNilArray) IsNil() bool {
+	return s == nil
+}
+
+func (s IsZeroArray) IsZero() bool {
+	return len(s) < 1
+}
+
+func TestFilterFormatCall(t *testing.T) {
+	{
+		var emptyStr string
+		var nilStr *string
+		var nilEmptyStr *string = &emptyStr
+		FilterFormatCall("1,2,3", []interface{}{"1", "2", "3"}, func(format string, arg interface{}) {
+			if arg.(string) != format {
+				t.Error("error")
+				return
+			}
+		})
+		FilterFormatCall("1,2,3", []interface{}{"1", "2", ""}, func(format string, arg interface{}) {
+			if arg.(string) != format {
+				t.Error("error")
+				return
+			}
+		})
+		FilterFormatCall("1,2,3", []interface{}{"1", "2", nil}, func(format string, arg interface{}) {
+			if arg.(string) != format {
+				t.Error("error")
+				return
+			}
+		})
+		FilterFormatCall("1,2,3", []interface{}{"1", "2", nilStr}, func(format string, arg interface{}) {
+			if arg.(string) != format {
+				t.Error("error")
+				return
+			}
+		})
+		FilterFormatCall("1,2,3", []interface{}{"1", "2", nilEmptyStr}, func(format string, arg interface{}) {
+			if arg.(string) != format {
+				t.Error("error")
+				return
+			}
+		})
+		FilterFormatCall("1,2,3#all", []interface{}{"1", "2", ""}, func(format string, arg interface{}) {
+			if format == "3" && arg.(string) != "" {
+				t.Error("error")
+			}
+			if format != "3" && arg.(string) != format {
+				t.Error("error")
+				return
+			}
+		})
+		FilterFormatCall("1,2,3", []interface{}{"1", "2", IsNilArray(nil)}, func(format string, arg interface{}) {
+			if arg.(string) != format {
+				t.Error("error")
+				return
+			}
+		})
+		FilterFormatCall("1,2,3", []interface{}{"1", "2", IsZeroArray(nil)}, func(format string, arg interface{}) {
+			if arg.(string) != format {
+				t.Error("error")
+				return
+			}
+		})
+	}
+	{ //error
+		func() {
+			defer func() {
+				recover()
+			}()
+			FilterFormatCall("x", []interface{}{1, 2}, func(format string, arg interface{}) {
+			})
+		}()
+	}
+}
+
 func TestInsert(t *testing.T) {
 	var err error
 	title := "test"
@@ -475,6 +555,22 @@ func TestInsert(t *testing.T) {
 		t.Error(err)
 		return
 	}
+
+	fileds, param, args = AppendInsertf(nil, nil, nil, "x1=$%v,x2=$%v,x3=$%v", "1", "2", "")
+	if len(fileds) != 2 || len(param) != 2 || len(args) != 2 {
+		err = fmt.Errorf("error")
+		t.Error(err)
+		return
+	}
+	fmt.Println("AppendInsertf-->", fileds, param, args)
+
+	fileds, param, args = AppendInsertf(nil, nil, nil, "x1=$%v,x2=$%v,x3=$%v#all", "1", "2", "")
+	if len(fileds) != 3 || len(param) != 3 || len(args) != 3 {
+		err = fmt.Errorf("error")
+		t.Error(err)
+		return
+	}
+	fmt.Println("AppendInsertf-->", fileds, param, args)
 
 	_, err = InsertFilter(NewPoolQueryer(), simple, "^tid#all", "returning", "tid#all")
 	if err != nil {
@@ -540,6 +636,19 @@ func TestUpdate(t *testing.T) {
 	fmt.Printf("   --->%v\n", sets)
 	fmt.Printf("   --->%v\n", args)
 
+	sets, args = AppendSetf(nil, nil, "x1=$%v,x2=$%v,x3=$%v", "1", "2", "")
+	if len(sets) != 2 || len(args) != 2 {
+		t.Error("error")
+		return
+	}
+	fmt.Println("AppendSetf-->", sets, args)
+	sets, args = AppendSetf(nil, nil, "x1=$%v,x2=$%v,x3=$%v#all", "1", "2", "")
+	if len(sets) != 3 || len(args) != 3 {
+		t.Error("error")
+		return
+	}
+	fmt.Println("AppendSetf-->", sets, args)
+
 	_, err = Update(NewPoolQueryer(), simple, sets, where, "and", args)
 	if err != nil {
 		t.Error(err)
@@ -589,12 +698,25 @@ func TestSearch(t *testing.T) {
 	var args []interface{}
 	querySQL := QuerySQL(simple, "#nil,zero")
 	where, args = AppendWhere(where, args, true, "user_id=$%v", userID)
-	where, args = AppendWhereN(where, args, true, "(title like $%v or data like $%v)", 2, "%"+key+"%")
+	where, args = AppendWhere(where, args, true, "(title like $%v or data like $%v)", "%"+key+"%")
 	querySQL = JoinWhere(querySQL, where, "and")
 	querySQL = JoinPage(querySQL, "order by tid", 0, 10)
 	fmt.Printf("query\n")
 	fmt.Printf("   --->%v\n", querySQL)
 	fmt.Printf("   --->%v\n", args)
+
+	where, args = AppendWheref(nil, nil, "x1=$%v,x2=$%v,x3=$%v", "1", "2", "")
+	if len(where) != 2 || len(args) != 2 {
+		t.Error("error")
+		return
+	}
+	fmt.Println("AppendWheref-->", where, args)
+	where, args = AppendWheref(nil, nil, "x1=$%v,x2=$%v,x3=$%v#all", "1", "2", "")
+	if len(where) != 3 || len(args) != 3 {
+		t.Error("error")
+		return
+	}
+	fmt.Println("AppendWheref-->", where, args)
 
 	table, fileds := QueryField(simple, "#all")
 	if table != "crud_simple" {
