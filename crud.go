@@ -474,11 +474,32 @@ func (c *CRUD) JoinPageUnify(sql string, v interface{}) (sql_ string) {
 
 func (c *CRUD) joinPageUnify(caller int, sql string, v interface{}) (sql_ string) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
 	pageValue := reflectValue.FieldByName("Page")
-	order := pageValue.FieldByName("Order")
-	offset := pageValue.FieldByName("Offset")
-	limit := pageValue.FieldByName("Limit")
-	sql_ = c.joinPage(caller+1, sql, order.String(), int(offset.Int()), int(limit.Int()))
+	pageType, _ := reflectType.FieldByName("Page")
+	if !pageValue.IsValid() {
+		return
+	}
+	order := ""
+	orderType, _ := pageType.Type.FieldByName("Order")
+	orderValue := pageValue.FieldByName("Order")
+	if orderValue.IsValid() {
+		order = orderValue.String()
+		if len(order) < 1 {
+			order = orderType.Tag.Get("default")
+		}
+	}
+	offset := 0
+	offsetValue := pageValue.FieldByName("Offset")
+	if offsetValue.IsValid() {
+		offset = int(offsetValue.Int())
+	}
+	limit := 0
+	limitValue := pageValue.FieldByName("Limit")
+	if limitValue.IsValid() {
+		limit = int(limitValue.Int())
+	}
+	sql_ = c.joinPage(caller+1, sql, order, offset, limit)
 	return
 }
 

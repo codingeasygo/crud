@@ -1148,7 +1148,7 @@ func TestScan(t *testing.T) {
 	}
 }
 
-type OnceQueryer struct {
+type ListSimpleUnify struct {
 	Model Simple `json:"model"`
 	Where struct {
 		UserID int64 `json:"user_id"`
@@ -1175,142 +1175,181 @@ type OnceQueryer struct {
 	} `json:"count" filter:"count(tid),max(user_id)#all"`
 }
 
+type FindSimpleUnify struct {
+	Model Simple `json:"model"`
+	Where struct {
+		UserID int64 `json:"user_id"`
+		Type   int   `json:"type" filter:"#all"`
+		Key    struct {
+			Title string `json:"title" cmp:"like"`
+			Data  string `json:"data" cmp:"like"`
+		} `json:"key" join:"or"`
+		Status []int `json:"status" cmp:"any($%v)"`
+		Empty  int   `json:"empty"`
+	} `json:"where" join:"and"`
+	Query struct {
+		Simple *Simple `json:"simple"`
+		UserID int64   `json:"user_id" scan:"user_id#all"`
+	} `json:"query" filter:"#all"`
+}
+
 func TestUnify(t *testing.T) {
 	var err error
-	once := &OnceQueryer{}
-	once.Where.UserID = 100
-	once.Where.Type = 10
-	once.Where.Key.Title = "%a%"
-	once.Where.Key.Data = "%a%"
-	once.Where.Status = []int{10, 100}
-	where, args := AppendWhereUnify(nil, nil, once)
+	list := &ListSimpleUnify{}
+	list.Where.UserID = 100
+	list.Where.Type = 10
+	list.Where.Key.Title = "%a%"
+	list.Where.Key.Data = "%a%"
+	list.Where.Status = []int{10, 100}
+	find := &FindSimpleUnify{}
+	find.Where.UserID = 100
+	find.Where.Type = 10
+	find.Where.Key.Title = "%a%"
+	find.Where.Key.Data = "%a%"
+	find.Where.Status = []int{10, 100}
+
+	//
+	where, args := AppendWhereUnify(nil, nil, list)
 	fmt.Println("AppendWhereUnify-->", strings.Join(where, " and "), args)
-	sql, args := JoinWhereUnify("select tid from crud_simple", nil, once)
+	sql, args := JoinWhereUnify("select tid from crud_simple", nil, list)
 	fmt.Println("JoinWhereUnify-->", sql, args)
-	sql, args = Default.JoinWhereUnify("select tid from crud_simple", nil, once)
+	sql, args = Default.JoinWhereUnify("select tid from crud_simple", nil, list)
 	fmt.Println("JoinWhereUnify-->", sql, args)
-	sql = JoinPageUnify(sql, once)
+	sql = JoinPageUnify(sql, list)
 	fmt.Println("JoinPageUnify-->", sql)
-	sql = Default.JoinPageUnify(sql, once)
+	sql = Default.JoinPageUnify(sql, list)
 	fmt.Println("JoinPageUnify-->", sql)
-	sql, args = QueryUnifySQL(once)
+	sql, args = QueryUnifySQL(list)
 	fmt.Println("QueryUnifySQL-->", sql, args)
-	sql, args = Default.QueryUnifySQL(once)
+	sql, args = Default.QueryUnifySQL(list)
 	fmt.Println("QueryUnifySQL-->", sql, args)
-	modelValue, queryFilter, dests := ScanUnifyDest(once)
-	if modelValue != &once.Model || queryFilter != "#all" || len(dests) != 3 {
+	modelValue, queryFilter, dests := ScanUnifyDest(list)
+	if modelValue != &list.Model || queryFilter != "#all" || len(dests) != 3 {
 		t.Error("error")
 		return
 	}
-	sql, args = CountUnifySQL(once)
+	sql, args = CountUnifySQL(list)
 	fmt.Println("CountUnifySQL-->", sql, args)
-	sql, args = Default.CountUnifySQL(once)
+	sql, args = Default.CountUnifySQL(list)
 	fmt.Println("CountUnifySQL-->", sql, args)
-	modelValue, queryFilter, dests = CountUnifyDest(once)
+	modelValue, queryFilter, dests = CountUnifyDest(list)
 	if len(modelValue.([]interface{})) != 3 || queryFilter != "count(tid),max(user_id)#all" || len(dests) != 4 {
 		t.Errorf("%v,%v,%v", len(modelValue.([]interface{})), queryFilter, len(dests))
 		return
 	}
 
-	once.Query.Simples = nil
-	once.Query.UserIDs = nil
-	err = QueryUnify(NewPoolQueryer(), once)
+	list.Query.Simples = nil
+	list.Query.UserIDs = nil
+	err = QueryUnify(NewPoolQueryer(), list)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	fmt.Println("QueryUnify-->", jsonString(once))
-	if len(once.Query.UserIDs) != 3 || len(once.Query.Simples) != 3 {
+	fmt.Println("QueryUnify-->", jsonString(list))
+	if len(list.Query.UserIDs) != 3 || len(list.Query.Simples) != 3 {
 		t.Error("error")
 		return
 	}
-	once.Query.Simples = nil
-	once.Query.UserIDs = nil
-	err = Default.QueryUnify(NewPoolQueryer(), once)
+	list.Query.Simples = nil
+	list.Query.UserIDs = nil
+	err = Default.QueryUnify(NewPoolQueryer(), list)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	fmt.Println("QueryUnify-->", jsonString(once))
-	if len(once.Query.UserIDs) != 3 || len(once.Query.Simples) != 3 {
+	fmt.Println("QueryUnify-->", jsonString(list))
+	if len(list.Query.UserIDs) != 3 || len(list.Query.Simples) != 3 {
 		t.Error("error")
 		return
 	}
 
-	once.Query.Simples = nil
-	once.Query.UserIDs = nil
+	list.Query.Simples = nil
+	list.Query.UserIDs = nil
 	rows, _ := NewPoolQueryer().Query("select")
-	err = ScanUnify(rows, once)
+	err = ScanUnify(rows, list)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	fmt.Println("ScanUnify-->", jsonString(once))
-	if len(once.Query.UserIDs) != 3 || len(once.Query.Simples) != 3 {
+	fmt.Println("ScanUnify-->", jsonString(list))
+	if len(list.Query.UserIDs) != 3 || len(list.Query.Simples) != 3 {
 		t.Error("error")
 		return
 	}
 
-	once.Query.Simples = nil
-	once.Query.UserIDs = nil
-	err = QueryUnifyRow(NewPoolQueryer(), once)
+	list.Query.Simples = nil
+	list.Query.UserIDs = nil
+	err = QueryUnifyRow(NewPoolQueryer(), list)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	fmt.Println("QueryUnifyRow-->", jsonString(once))
-	if len(once.Query.UserIDs) != 1 || len(once.Query.Simples) != 1 {
+	fmt.Println("QueryUnifyRow-->", jsonString(list))
+	if len(list.Query.UserIDs) != 1 || len(list.Query.Simples) != 1 {
 		t.Error("error")
 		return
 	}
-	once.Query.Simples = nil
-	once.Query.UserIDs = nil
-	err = Default.QueryUnifyRow(NewPoolQueryer(), once)
+	list.Query.Simples = nil
+	list.Query.UserIDs = nil
+	err = Default.QueryUnifyRow(NewPoolQueryer(), list)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	fmt.Println("QueryUnifyRow-->", jsonString(once))
-	if len(once.Query.UserIDs) != 1 || len(once.Query.Simples) != 1 {
+	fmt.Println("QueryUnifyRow-->", jsonString(list))
+	if len(list.Query.UserIDs) != 1 || len(list.Query.Simples) != 1 {
 		t.Error("error")
 		return
 	}
 
-	once.Query.Simples = nil
-	once.Query.UserIDs = nil
+	list.Query.Simples = nil
+	list.Query.UserIDs = nil
 	row := NewPoolQueryer().QueryRow("select")
-	err = ScanUnifyRow(row, once)
+	err = ScanUnifyRow(row, list)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	fmt.Println("ScanUnifyRow-->", jsonString(once))
-	if len(once.Query.UserIDs) != 1 || len(once.Query.Simples) != 1 {
+	fmt.Println("ScanUnifyRow-->", jsonString(list))
+	if len(list.Query.UserIDs) != 1 || len(list.Query.Simples) != 1 {
 		t.Error("error")
 		return
 	}
 
-	once.Query.Simples = nil
-	once.Query.UserIDs = nil
-	err = CountUnify(NewPoolQueryer(), once)
+	list.Query.Simples = nil
+	list.Query.UserIDs = nil
+	err = CountUnify(NewPoolQueryer(), list)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	fmt.Println("CountUnify-->", jsonString(once))
-	if once.Count.All < 1 || once.Count.UserID < 1 {
+	fmt.Println("CountUnify-->", jsonString(list))
+	if list.Count.All < 1 || list.Count.UserID < 1 {
 		t.Error("error")
 		return
 	}
-	once.Query.Simples = nil
-	once.Query.UserIDs = nil
-	err = Default.CountUnify(NewPoolQueryer(), once)
+	list.Query.Simples = nil
+	list.Query.UserIDs = nil
+	err = Default.CountUnify(NewPoolQueryer(), list)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	fmt.Println("CountUnify-->", jsonString(once))
-	if once.Count.All < 1 || once.Count.UserID < 1 {
+	fmt.Println("CountUnify-->", jsonString(list))
+	if list.Count.All < 1 || list.Count.UserID < 1 {
+		t.Error("error")
+		return
+	}
+
+	find.Query.Simple = nil
+	find.Query.UserID = 0
+	err = QueryUnifyRow(NewPoolQueryer(), find)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	fmt.Println("QueryUnifyRow-->", jsonString(find))
+	if find.Query.UserID < 1 || find.Query.Simple == nil {
 		t.Error("error")
 		return
 	}
@@ -1318,12 +1357,12 @@ func TestUnify(t *testing.T) {
 
 func TestError(t *testing.T) {
 	var err error
-	once := &OnceQueryer{}
-	once.Where.UserID = 100
-	once.Where.Type = 10
-	once.Where.Key.Title = "%a%"
-	once.Where.Key.Data = "%a%"
-	once.Where.Status = []int{10, 100}
+	list := &ListSimpleUnify{}
+	list.Where.UserID = 100
+	list.Where.Type = 10
+	list.Where.Key.Title = "%a%"
+	list.Where.Key.Data = "%a%"
+	list.Where.Status = []int{10, 100}
 	{ //insert error
 		simple := &Simple{}
 		pool := NewPoolQueryer()
@@ -1523,16 +1562,16 @@ func TestError(t *testing.T) {
 		}
 
 		//
-		once.Query.Simples = nil
-		once.Query.UserIDs = nil
-		err = QueryUnify(&PoolQueryer{QueryErr: fmt.Errorf("xx")}, once)
+		list.Query.Simples = nil
+		list.Query.UserIDs = nil
+		err = QueryUnify(&PoolQueryer{QueryErr: fmt.Errorf("xx")}, list)
 		if err == nil {
 			t.Error(err)
 			return
 		}
-		once.Query.Simples = nil
-		once.Query.UserIDs = nil
-		err = QueryUnifyRow(&PoolQueryer{ScanErr: fmt.Errorf("xx")}, once)
+		list.Query.Simples = nil
+		list.Query.UserIDs = nil
+		err = QueryUnifyRow(&PoolQueryer{ScanErr: fmt.Errorf("xx")}, list)
 		if err == nil {
 			t.Error(err)
 			return
@@ -1558,9 +1597,9 @@ func TestError(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		once.Query.Simples = nil
-		once.Query.UserIDs = nil
-		err = CountUnify(pool, once)
+		list.Query.Simples = nil
+		list.Query.UserIDs = nil
+		err = CountUnify(pool, list)
 		if err == nil {
 			t.Error(err)
 			return
