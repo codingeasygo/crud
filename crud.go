@@ -127,6 +127,16 @@ func (c *CRUD) checkValue(val reflect.Value, incNil, incZero bool) bool {
 	return true
 }
 
+func (c *CRUD) Sprintf(format string, v int) string {
+	args := []interface{}{}
+	arg := fmt.Sprintf("%d", v)
+	n := strings.Count(format, c.ArgFormat)
+	for i := 0; i < n; i++ {
+		args = append(args, arg)
+	}
+	return fmt.Sprintf(format, args...)
+}
+
 func FilterFieldCall(on string, v interface{}, filter string, call func(fieldName, fieldFunc string, field reflect.StructField, value interface{})) (table string) {
 	table = Default.FilterFieldCall(on, v, filter, call)
 	return
@@ -207,7 +217,13 @@ func (c *CRUD) FilterFieldCall(on string, v interface{}, filter string, call fun
 		if _, ok := fieldAll[fieldName]; (isExc && ok) || (!isExc && len(fieldAll) > 0 && !ok) {
 			continue
 		}
-		if !c.checkValue(fieldValue, incNil, incZero) {
+		filter := strings.TrimPrefix(fieldType.Tag.Get("filter"), "#")
+		fieldIncNil, fieldIncZero := incNil, incZero
+		if len(filter) > 0 {
+			fieldIncNil = strings.Contains(","+filter+",", ",nil,") || strings.Contains(","+filter+",", ",all,")
+			fieldIncZero = strings.Contains(","+filter+",", ",zero,") || strings.Contains(","+filter+",", ",all,")
+		}
+		if !c.checkValue(fieldValue, fieldIncNil, fieldIncZero) {
 			continue
 		}
 		if c.NameConv != nil {
@@ -242,14 +258,27 @@ func (c *CRUD) FilterFormatCall(formats string, args []interface{}, call func(fo
 	}
 }
 
-func (c *CRUD) Sprintf(format string, v int) string {
-	args := []interface{}{}
-	arg := fmt.Sprintf("%d", v)
-	n := strings.Count(format, c.ArgFormat)
-	for i := 0; i < n; i++ {
-		args = append(args, arg)
-	}
-	return fmt.Sprintf(format, args...)
+func (c *CRUD) FilterWhere(args []interface{}, v interface{}) (where_ []string, args_ []interface{}) {
+	args_ = args
+	c.FilterFieldCall("where", v, "", func(fieldName, fieldFunc string, field reflect.StructField, fieldValue interface{}) {
+		if field.Type.Kind() == reflect.Struct {
+			var cmpInner []string
+			cmpInner, args_ = c.FilterWhere(args_, fieldValue)
+			cmpSep := field.Tag.Get("join")
+			where_ = append(where_, strings.Join(cmpInner, " "+cmpSep+" "))
+			return
+		}
+		cmp := field.Tag.Get("cmp")
+		if len(cmp) < 1 {
+			cmp = "= " + c.ArgFormat
+		}
+		if !strings.Contains(cmp, c.ArgFormat) {
+			cmp += " " + c.ArgFormat
+		}
+		args_ = append(args_, fieldValue)
+		where_ = append(where_, c.Sprintf(fieldName+" "+cmp, len(args_)))
+	})
+	return
 }
 
 func AppendInsert(fields, param []string, args []interface{}, ok bool, format string, v interface{}) (fields_, param_ []string, args_ []interface{}) {
@@ -340,6 +369,21 @@ func (c *CRUD) AppendWheref(where []string, args []interface{}, formats string, 
 	return
 }
 
+func AppendWhereUnify(where []string, args []interface{}, v interface{}) (where_ []string, args_ []interface{}) {
+	where_, args_ = Default.AppendWhereUnify(where, args, v)
+	return
+}
+
+func (c *CRUD) AppendWhereUnify(where []string, args []interface{}, v interface{}) (where_ []string, args_ []interface{}) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	modelValue := reflectValue.FieldByName("Where")
+	where_, args_ = where, args
+	filterWhere, filterArgs := c.FilterWhere(args, modelValue.Addr().Interface())
+	where_ = append(where_, filterWhere...)
+	args_ = append(args_, filterArgs...)
+	return
+}
+
 func JoinWhere(sql string, where []string, sep string, suffix ...string) (sql_ string) {
 	sql_ = Default.JoinWhere(sql, where, sep, suffix...)
 	return
@@ -356,6 +400,22 @@ func (c *CRUD) JoinWhere(sql string, where []string, sep string, suffix ...strin
 	return
 }
 
+func JoinWhereUnify(sql string, args []interface{}, v interface{}) (sql_ string, args_ []interface{}) {
+	sql_, args_ = Default.JoinWhereUnify(sql, args, v)
+	return
+}
+
+func (c *CRUD) JoinWhereUnify(sql string, args []interface{}, v interface{}) (sql_ string, args_ []interface{}) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
+	whereType, _ := reflectType.FieldByName("Where")
+	whereJoin := whereType.Tag.Get("join")
+	args_ = args
+	where, args_ := c.AppendWhereUnify(nil, args_, v)
+	sql_ = c.JoinWhere(sql, where, whereJoin)
+	return
+}
+
 func JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
 	sql_ = Default.JoinPage(sql, orderby, offset, limit)
 	return
@@ -364,17 +424,32 @@ func JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
 func (c *CRUD) JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
 	sql_ = sql
 	if offset >= 0 || limit > 0 {
-		sql_ += " " + orderby + " "
+		sql_ += " " + orderby
 	}
 	if offset >= 0 {
-		sql_ += fmt.Sprintf(" offset %v ", offset)
+		sql_ += fmt.Sprintf(" offset %v", offset)
 	}
 	if limit > 0 {
-		sql_ += fmt.Sprintf(" limit %v ", limit)
+		sql_ += fmt.Sprintf(" limit %v", limit)
 	}
 	if c.Verbose {
 		c.Log("CRUD join page doen with sql:%v", sql_)
 	}
+	return
+}
+
+func JoinPageUnify(sql string, v interface{}) (sql_ string) {
+	sql_ = Default.JoinPageUnify(sql, v)
+	return
+}
+
+func (c *CRUD) JoinPageUnify(sql string, v interface{}) (sql_ string) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	pageValue := reflectValue.FieldByName("Page")
+	order := pageValue.FieldByName("Order")
+	offset := pageValue.FieldByName("Offset")
+	limit := pageValue.FieldByName("Limit")
+	sql_ = c.JoinPage(sql, order.String(), int(offset.Int()), int(limit.Int()))
 	return
 }
 
@@ -643,6 +718,23 @@ func (c *CRUD) QuerySQL(v interface{}, filter string, suffix ...string) (sql str
 	return
 }
 
+func QueryUnifySQL(v interface{}) (sql string, args []interface{}) {
+	sql, args = Default.QueryUnifySQL(v)
+	return
+}
+
+func (c *CRUD) QueryUnifySQL(v interface{}) (sql string, args []interface{}) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
+	modelValue := reflectValue.FieldByName("Model")
+	queryType, _ := reflectType.FieldByName("Query")
+	queryFilter := queryType.Tag.Get("filter")
+	sql = c.QuerySQL(modelValue.Addr().Interface(), queryFilter)
+	sql, args = c.JoinWhereUnify(sql, nil, v)
+	sql = c.JoinPageUnify(sql, v)
+	return
+}
+
 func ScanArgs(v interface{}, filter string) (args []interface{}) {
 	args = Default.ScanArgs(v, filter)
 	return
@@ -652,6 +744,29 @@ func (c *CRUD) ScanArgs(v interface{}, filter string) (args []interface{}) {
 	c.FilterFieldCall("scan", v, filter, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		args = append(args, value)
 	})
+	return
+}
+
+func ScanUnifyDest(v interface{}) (modelValue interface{}, queryFilter string, dests []interface{}) {
+	modelValue, queryFilter, dests = Default.ScanUnifyDest(v)
+	return
+}
+
+func (c *CRUD) ScanUnifyDest(v interface{}) (modelValue interface{}, queryFilter string, dests []interface{}) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
+	modelValue = reflectValue.FieldByName("Model").Addr().Interface()
+	queryType, _ := reflectType.FieldByName("Query")
+	queryValue := reflectValue.FieldByName("Query")
+	queryFilter = queryType.Tag.Get("filter")
+	queryNum := queryType.Type.NumField()
+	for i := 0; i < queryNum; i++ {
+		dests = append(dests, queryValue.Field(i).Addr().Interface())
+		scan := queryType.Type.Field(i).Tag.Get("scan")
+		if len(scan) > 0 {
+			dests = append(dests, scan)
+		}
+	}
 	return
 }
 
@@ -830,6 +945,17 @@ func (c *CRUD) Scan(rows Rows, v interface{}, filter string, dest ...interface{}
 	return
 }
 
+func ScanUnify(rows Rows, v interface{}) (err error) {
+	err = Default.ScanUnify(rows, v)
+	return
+}
+
+func (c *CRUD) ScanUnify(rows Rows, v interface{}) (err error) {
+	modelValue, modelFilter, dests := c.ScanUnifyDest(v)
+	err = c.Scan(rows, modelValue, modelFilter, dests...)
+	return
+}
+
 func Query(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
 	err = Default.Query(queryer, v, filter, sql, args, dest...)
 	return
@@ -876,6 +1002,28 @@ func (c *CRUD) QuerySimple(queryer, v interface{}, filter string, suffix string,
 	return
 }
 
+func QueryUnify(queryer, v interface{}) (err error) {
+	err = Default.QueryUnify(queryer, v)
+	return
+}
+
+func (c *CRUD) QueryUnify(queryer, v interface{}) (err error) {
+	sql, args := c.QueryUnifySQL(v)
+	rows, err := c.queryerQuery(queryer, sql, args)
+	if err != nil {
+		if c.Verbose {
+			c.Log("CRUD query unify by struct:%v,sql:%v,args:%v result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
+		}
+		return
+	}
+	defer rows.Close()
+	if c.Verbose {
+		c.Log("CRUD query unify by struct:%v,sql:%v,args:%v result is success", reflect.TypeOf(v), sql, jsonString(args))
+	}
+	err = c.ScanUnify(rows, v)
+	return
+}
+
 func ScanRow(row Row, v interface{}, filter string, dest ...interface{}) (err error) {
 	err = Default.ScanRow(row, v, filter, dest...)
 	return
@@ -895,6 +1043,17 @@ func (c *CRUD) ScanRow(row Row, v interface{}, filter string, dest ...interface{
 	if err != nil {
 		return
 	}
+	return
+}
+
+func ScanUnifyRow(row Row, v interface{}) (err error) {
+	err = Default.ScanUnifyRow(row, v)
+	return
+}
+
+func (c *CRUD) ScanUnifyRow(row Row, v interface{}) (err error) {
+	modelValue, modelFilter, dests := c.ScanUnifyDest(v)
+	err = c.ScanRow(row, modelValue, modelFilter, dests...)
 	return
 }
 
@@ -940,6 +1099,26 @@ func (c *CRUD) QuerySimpleRow(queryer, v interface{}, filter string, suffix stri
 	return
 }
 
+func QueryUnifyRow(queryer, v interface{}) (err error) {
+	err = Default.QueryUnifyRow(queryer, v)
+	return
+}
+
+func (c *CRUD) QueryUnifyRow(queryer, v interface{}) (err error) {
+	sql, args := c.QueryUnifySQL(v)
+	err = c.ScanUnifyRow(c.queryerQueryRow(queryer, sql, args), v)
+	if err != nil {
+		if c.Verbose {
+			c.Log("CRUD query unify row by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
+		}
+		return
+	}
+	if c.Verbose {
+		c.Log("CRUD query unify row by struct:%v,sql:%v,args:%v, result is success", reflect.TypeOf(v), sql, jsonString(args))
+	}
+	return
+}
+
 func CountSQL(v interface{}, filter string, suffix ...string) (sql string) {
 	sql = Default.CountSQL(v, filter, suffix...)
 	return
@@ -957,6 +1136,45 @@ func (c *CRUD) CountSQL(v interface{}, filter string, suffix ...string) (sql str
 	sql = fmt.Sprintf(`select %v from %v %v`, strings.Join(fields, ","), table, strings.Join(suffix, " "))
 	if c.Verbose {
 		c.Log("CRUD generate count sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
+	}
+	return
+}
+
+func CountUnifySQL(v interface{}) (sql string, args []interface{}) {
+	sql, args = Default.CountUnifySQL(v)
+	return
+}
+
+func (c *CRUD) CountUnifySQL(v interface{}) (sql string, args []interface{}) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
+	modelValue := reflectValue.FieldByName("Model").Addr().Interface()
+	queryType, _ := reflectType.FieldByName("Count")
+	queryFilter := queryType.Tag.Get("filter")
+	sql = c.CountSQL(modelValue, queryFilter)
+	sql, args = c.JoinWhereUnify(sql, nil, v)
+	return
+}
+
+func CountUnifyDest(v interface{}) (modelValue interface{}, queryFilter string, dests []interface{}) {
+	modelValue, queryFilter, dests = Default.CountUnifyDest(v)
+	return
+}
+
+func (c *CRUD) CountUnifyDest(v interface{}) (modelValue interface{}, queryFilter string, dests []interface{}) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
+	modelValue = reflectValue.FieldByName("Model").Addr().Interface()
+	queryType, _ := reflectType.FieldByName("Count")
+	queryValue := reflectValue.FieldByName("Count")
+	queryFilter = queryType.Tag.Get("filter")
+	queryNum := queryType.Type.NumField()
+	for i := 0; i < queryNum; i++ {
+		dests = append(dests, queryValue.Field(i).Addr().Interface())
+		scan := queryType.Type.Field(i).Tag.Get("scan")
+		if len(scan) > 0 {
+			dests = append(dests, scan)
+		}
 	}
 	return
 }
@@ -1000,5 +1218,26 @@ func CountSimple(queryer, v interface{}, filter, suffix string, args []interface
 func (c *CRUD) CountSimple(queryer, v interface{}, filter, suffix string, args []interface{}, dest ...interface{}) (err error) {
 	sql := c.CountSQL(v, filter, suffix)
 	err = c.Count(queryer, v, filter, sql, args, dest...)
+	return
+}
+
+func CountUnify(queryer, v interface{}) (err error) {
+	err = Default.CountUnify(queryer, v)
+	return
+}
+
+func (c *CRUD) CountUnify(queryer, v interface{}) (err error) {
+	sql, args := c.CountUnifySQL(v)
+	modelValue, queryFilter, dests := c.CountUnifyDest(v)
+	err = c.ScanRow(c.queryerQueryRow(queryer, sql, args), modelValue, queryFilter, dests...)
+	if err != nil {
+		if c.Verbose {
+			c.Log("CRUD count unify by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
+		}
+		return
+	}
+	if c.Verbose {
+		c.Log("CRUD count unify by struct:%v,sql:%v,args:%v, result is success", reflect.TypeOf(v), sql, jsonString(args))
+	}
 	return
 }
