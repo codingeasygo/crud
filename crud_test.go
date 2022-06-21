@@ -12,9 +12,6 @@ import (
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	Default.NameConv = func(on, name string, field reflect.StructField) string {
-		return name
-	}
 	Default.Verbose = true
 }
 

@@ -61,9 +61,16 @@ var Default = &CRUD{
 	Log: func(caller int, format string, args ...interface{}) {
 		log.Output(caller+3, fmt.Sprintf(format, args...))
 	},
+	NameConv: func(on, name string, field reflect.StructField) string {
+		return name
+	},
+	ParmConv: func(on, fieldName, fieldFunc string, field reflect.StructField, value interface{}) interface{} {
+		return value
+	},
 }
 
 type NameConv func(on, name string, field reflect.StructField) string
+type ParmConv func(on, fieldName, fieldFunc string, field reflect.StructField, value interface{}) interface{}
 type LogF func(caller int, format string, args ...interface{})
 type TableName string
 
@@ -74,6 +81,7 @@ type CRUD struct {
 	Verbose   bool
 	Log       LogF
 	NameConv  NameConv
+	ParmConv  ParmConv
 }
 
 func Table(v interface{}) (table string) {
@@ -229,9 +237,7 @@ func (c *CRUD) FilterFieldCall(on string, v interface{}, filter string, call fun
 		if !c.checkValue(fieldValue, fieldIncNil, fieldIncZero) {
 			continue
 		}
-		if c.NameConv != nil {
-			fieldName = c.NameConv(on, fieldName, fieldType)
-		}
+		fieldName = c.NameConv(on, fieldName, fieldType)
 		call(fieldName, fieldAll[fieldName], fieldType, fieldValue.Addr().Interface())
 	}
 	return
@@ -278,7 +284,7 @@ func (c *CRUD) FilterWhere(args []interface{}, v interface{}) (where_ []string, 
 		if !strings.Contains(cmp, c.ArgFormat) {
 			cmp += " " + c.ArgFormat
 		}
-		args_ = append(args_, fieldValue)
+		args_ = append(args_, c.ParmConv("where", fieldName, fieldFunc, field, fieldValue))
 		where_ = append(where_, c.Sprintf(fieldName+" "+cmp, len(args_)))
 	})
 	return
@@ -292,7 +298,7 @@ func AppendInsert(fields, param []string, args []interface{}, ok bool, format st
 func (c *CRUD) AppendInsert(fields, param []string, args []interface{}, ok bool, format string, v interface{}) (fields_, param_ []string, args_ []interface{}) {
 	fields_, param_, args_ = fields, param, args
 	if ok {
-		args_ = append(args_, v)
+		args_ = append(args_, c.ParmConv("insert", format, "", reflect.StructField{}, v))
 		parts := strings.SplitN(format, "=", 2)
 		param_ = append(param_, c.Sprintf(parts[1], len(args_)))
 		fields_ = append(fields_, parts[0])
@@ -308,7 +314,7 @@ func AppendInsertf(fields, param []string, args []interface{}, formats string, v
 func (c *CRUD) AppendInsertf(fields, param []string, args []interface{}, formats string, v ...interface{}) (fields_, param_ []string, args_ []interface{}) {
 	fields_, param_, args_ = fields, param, args
 	c.FilterFormatCall(formats, v, func(format string, arg interface{}) {
-		args_ = append(args_, arg)
+		args_ = append(args_, c.ParmConv("insert", format, "", reflect.StructField{}, arg))
 		parts := strings.SplitN(format, "=", 2)
 		param_ = append(param_, c.Sprintf(parts[1], len(args_)))
 		fields_ = append(fields_, parts[0])
@@ -324,7 +330,7 @@ func AppendSet(sets []string, args []interface{}, ok bool, format string, v inte
 func (c *CRUD) AppendSet(sets []string, args []interface{}, ok bool, format string, v interface{}) (sets_ []string, args_ []interface{}) {
 	sets_, args_ = sets, args
 	if ok {
-		args_ = append(args_, v)
+		args_ = append(args_, c.ParmConv("update", format, "", reflect.StructField{}, v))
 		sets_ = append(sets_, c.Sprintf(format, len(args_)))
 	}
 	return
@@ -338,7 +344,7 @@ func AppendSetf(sets []string, args []interface{}, formats string, v ...interfac
 func (c *CRUD) AppendSetf(sets []string, args []interface{}, formats string, v ...interface{}) (sets_ []string, args_ []interface{}) {
 	sets_, args_ = sets, args
 	c.FilterFormatCall(formats, v, func(format string, arg interface{}) {
-		args_ = append(args_, arg)
+		args_ = append(args_, c.ParmConv("update", format, "", reflect.StructField{}, v))
 		sets_ = append(sets_, c.Sprintf(format, len(args_)))
 	})
 	return
@@ -352,7 +358,7 @@ func AppendWhere(where []string, args []interface{}, ok bool, format string, v i
 func (c *CRUD) AppendWhere(where []string, args []interface{}, ok bool, format string, v interface{}) (where_ []string, args_ []interface{}) {
 	where_, args_ = where, args
 	if ok {
-		args_ = append(args_, v)
+		args_ = append(args_, c.ParmConv("where", format, "", reflect.StructField{}, v))
 		where_ = append(where_, c.Sprintf(format, len(args_)))
 	}
 	return
@@ -366,7 +372,7 @@ func AppendWheref(where []string, args []interface{}, format string, v ...interf
 func (c *CRUD) AppendWheref(where []string, args []interface{}, formats string, v ...interface{}) (where_ []string, args_ []interface{}) {
 	where_, args_ = where, args
 	c.FilterFormatCall(formats, v, func(format string, arg interface{}) {
-		args_ = append(args_, arg)
+		args_ = append(args_, c.ParmConv("where", format, "", reflect.StructField{}, arg))
 		where_ = append(where_, c.Sprintf(format, len(args_)))
 	})
 	return
@@ -521,7 +527,7 @@ func (c *CRUD) InsertArgs(v interface{}, filter string) (table string, fields, p
 
 func (c *CRUD) insertArgs(caller int, v interface{}, filter string) (table string, fields, param []string, args []interface{}) {
 	table = c.FilterFieldCall("insert", v, filter, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
-		args = append(args, value)
+		args = append(args, c.ParmConv("insert", fieldName, fieldFunc, field, value))
 		fields = append(fields, fieldName)
 		param = append(param, fmt.Sprintf(c.ArgFormat, len(args)))
 	})
@@ -599,7 +605,7 @@ func (c *CRUD) UpdateArgs(v interface{}, filter string, args []interface{}) (tab
 func (c *CRUD) updateArgs(caller int, v interface{}, filter string, args []interface{}) (table string, sets []string, args_ []interface{}) {
 	args_ = args
 	table = c.FilterFieldCall("update", v, filter, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
-		args_ = append(args_, value)
+		args_ = append(args_, c.ParmConv("update", fieldName, fieldFunc, field, value))
 		sets = append(sets, fmt.Sprintf("%v="+c.ArgFormat, fieldName, len(args_)))
 	})
 	if c.Verbose {
@@ -835,7 +841,7 @@ func ScanArgs(v interface{}, filter string) (args []interface{}) {
 
 func (c *CRUD) ScanArgs(v interface{}, filter string) (args []interface{}) {
 	c.FilterFieldCall("scan", v, filter, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
-		args = append(args, value)
+		args = append(args, c.ParmConv("scan", fieldName, fieldFunc, field, value))
 	})
 	return
 }
