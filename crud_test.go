@@ -3,6 +3,7 @@ package crud
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 )
 
 func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	Default.NameConv = func(on, name string, field reflect.StructField) string {
 		return name
 	}
@@ -534,6 +536,10 @@ func TestInsert(t *testing.T) {
 	fmt.Printf("insert\n")
 	fmt.Printf("   --->%v\n", insertSQL)
 	fmt.Printf("   --->%v\n", insertArg)
+	insertSQL, insertArg = Default.InsertSQL(simple, "", "returning tid")
+	fmt.Printf("insert\n")
+	fmt.Printf("   --->%v\n", insertSQL)
+	fmt.Printf("   --->%v\n", insertArg)
 	insertSQL1, insertArg1 := InsertSQL(simple, "^update_time,create_time,status", "crud_simple", "returning tid")
 	fmt.Printf("insert\n")
 	fmt.Printf("   --->%v\n", insertSQL1)
@@ -544,7 +550,13 @@ func TestInsert(t *testing.T) {
 		return
 	}
 	table, fileds, param, args := InsertArgs(simple, "")
-	if table != "crud_simple" {
+	if table != "crud_simple" || len(fileds) < 1 || len(param) < 1 || len(args) < 1 {
+		err = fmt.Errorf("table error")
+		t.Error(err)
+		return
+	}
+	table, fileds, param, args = Default.InsertArgs(simple, "")
+	if table != "crud_simple" || len(fileds) < 1 || len(param) < 1 || len(args) < 1 {
 		err = fmt.Errorf("table error")
 		t.Error(err)
 		return
@@ -578,6 +590,11 @@ func TestInsert(t *testing.T) {
 		return
 	}
 	_, err = InsertFilter(NewPoolQueryer(), simple, "^tid#all", "", "")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	_, err = Default.InsertFilter(NewPoolQueryer(), simple, "^tid#all", "", "")
 	if err != nil {
 		t.Error(err)
 		return
@@ -619,9 +636,19 @@ func TestUpdate(t *testing.T) {
 	fmt.Printf("update\n")
 	fmt.Printf("   --->%v\n", updateSQL)
 	fmt.Printf("   --->%v\n", args)
+	updateSQL, args = Default.UpdateSQL(simple, "", nil)
+	fmt.Printf("update\n")
+	fmt.Printf("   --->%v\n", updateSQL)
+	fmt.Printf("   --->%v\n", args)
 
 	table, sets, args := UpdateArgs(simple, "", nil)
-	if table != "crud_simple" {
+	if table != "crud_simple" || len(sets) < 1 || len(args) < 1 {
+		err = fmt.Errorf("table error")
+		t.Error(err)
+		return
+	}
+	table, sets, args = Default.UpdateArgs(simple, "", nil)
+	if table != "crud_simple" || len(sets) < 1 || len(args) < 1 {
 		err = fmt.Errorf("table error")
 		t.Error(err)
 		return
@@ -654,7 +681,17 @@ func TestUpdate(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	_, err = Default.Update(NewPoolQueryer(), simple, sets, where, "and", args)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	err = UpdateRow(NewPoolQueryer(), simple, sets, where, "and", args)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = Default.UpdateRow(NewPoolQueryer(), simple, sets, where, "and", args)
 	if err != nil {
 		t.Error(err)
 		return
@@ -665,7 +702,17 @@ func TestUpdate(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	_, err = Default.UpdateFilter(NewPoolQueryer(), simple, "title,image,update_time,status", where, "and", args)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	err = UpdateFilterRow(NewPoolQueryer(), simple, "title,image,update_time,status", where, "and", args)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = Default.UpdateFilterRow(NewPoolQueryer(), simple, "title,image,update_time,status", where, "and", args)
 	if err != nil {
 		t.Error(err)
 		return
@@ -676,7 +723,17 @@ func TestUpdate(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	_, err = Default.UpdateSimple(NewPoolQueryer(), simple, "title,image,update_time,status", "", nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	err = UpdateSimpleRow(NewPoolQueryer(), simple, "title,image,update_time,status", "where tid=$1", []interface{}{1})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = Default.UpdateSimpleRow(NewPoolQueryer(), simple, "title,image,update_time,status", "where tid=$1", []interface{}{1})
 	if err != nil {
 		t.Error(err)
 		return
@@ -701,6 +758,15 @@ func TestSearch(t *testing.T) {
 	where, args = AppendWhere(where, args, true, "(title like $%v or data like $%v)", "%"+key+"%")
 	querySQL = JoinWhere(querySQL, where, "and")
 	querySQL = JoinPage(querySQL, "order by tid", 0, 10)
+	fmt.Printf("query\n")
+	fmt.Printf("   --->%v\n", querySQL)
+	fmt.Printf("   --->%v\n", args)
+
+	querySQL = Default.QuerySQL(simple, "#nil,zero")
+	where, args = Default.AppendWhere(where, args, true, "user_id=$%v", userID)
+	where, args = Default.AppendWhere(where, args, true, "(title like $%v or data like $%v)", "%"+key+"%")
+	querySQL = Default.JoinWhere(querySQL, where, "and")
+	querySQL = Default.JoinPage(querySQL, "order by tid", 0, 10)
 	fmt.Printf("query\n")
 	fmt.Printf("   --->%v\n", querySQL)
 	fmt.Printf("   --->%v\n", args)
@@ -731,6 +797,14 @@ func TestSearch(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	table, fileds = Default.QueryField(simple, "#all")
+	if table != "crud_simple" {
+		err = fmt.Errorf("table error")
+		t.Error(err)
+		return
+	}
+	fmt.Printf("query\n")
+	fmt.Printf("   --->%v\n", fileds)
 }
 
 type UserIDx map[int64]string
@@ -816,6 +890,7 @@ func TestQuery(t *testing.T) {
 	//test int64
 	var testIDs0 []int64
 	var testIDs1 int64
+	testIDs0 = nil
 	err = Query(
 		&PoolQueryer{}, int64(0), "",
 		"int64", []interface{}{"arg"},
@@ -826,7 +901,28 @@ func TestQuery(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	testIDs0 = nil
+	err = Default.Query(
+		&PoolQueryer{}, int64(0), "",
+		"int64", []interface{}{"arg"},
+		&testIDs0,
+	)
+	if err != nil || len(testIDs0) != 3 {
+		err = fmt.Errorf("error")
+		t.Error(err)
+		return
+	}
 	err = QueryRow(
+		&PoolQueryer{}, int64(0), "",
+		"int64", []interface{}{"arg"},
+		&testIDs1,
+	)
+	if err != nil || testIDs1 < 1 {
+		err = fmt.Errorf("error")
+		t.Error(err)
+		return
+	}
+	err = Default.QueryRow(
 		&PoolQueryer{}, int64(0), "",
 		"int64", []interface{}{"arg"},
 		&testIDs1,
@@ -849,7 +945,22 @@ func TestQuery(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	simpleList = []*Simple{}
+	err = Default.QueryFilter(NewPoolQueryer(), &Simple{}, "#all", nil, "", nil, "", 0, 10, &simpleList)
+	if err != nil {
+		return
+	}
+	if len(simpleList) < 1 {
+		err = fmt.Errorf("data error")
+		t.Error(err)
+		return
+	}
 	err = QueryFilterRow(NewPoolQueryer(), &Simple{}, "#all", nil, "", []interface{}{"arg"}, &simple)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = Default.QueryFilterRow(NewPoolQueryer(), &Simple{}, "#all", nil, "", []interface{}{"arg"}, &simple)
 	if err != nil {
 		t.Error(err)
 		return
@@ -866,7 +977,23 @@ func TestQuery(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	simpleList = []*Simple{}
+	err = Default.QuerySimple(NewPoolQueryer(), &Simple{}, "#all", "", []interface{}{"arg"}, 0, 10, &simpleList)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(simpleList) < 1 {
+		err = fmt.Errorf("data error")
+		t.Error(err)
+		return
+	}
 	err = QuerySimpleRow(NewPoolQueryer(), &Simple{}, "#all", "", []interface{}{"arg"}, &simple)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = Default.QuerySimpleRow(NewPoolQueryer(), &Simple{}, "#all", "", []interface{}{"arg"}, &simple)
 	if err != nil {
 		t.Error(err)
 		return
@@ -897,10 +1024,20 @@ func TestCount(t *testing.T) {
 			t.Errorf("err:%v", countSQL)
 			return
 		}
+		if countSQL := Default.CountSQL(simple, "count(tid)#all"); !strings.Contains(countSQL, "count(tid)") {
+			t.Errorf("err:%v", countSQL)
+			return
+		}
 	}
 	{
 		var countVal int64
 		err = Count(NewPoolQueryer(), simple, "tid#all", "select count(*) from crud_simple", nil, &countVal, "tid")
+		if err != nil || countVal < 1 {
+			t.Error(err)
+			return
+		}
+		fmt.Println(countVal)
+		err = Default.Count(NewPoolQueryer(), simple, "tid#all", "select count(*) from crud_simple", nil, &countVal, "tid")
 		if err != nil || countVal < 1 {
 			t.Error(err)
 			return
@@ -915,10 +1052,22 @@ func TestCount(t *testing.T) {
 			return
 		}
 		fmt.Println(countVal)
+		err = Default.CountFilter(NewPoolQueryer(), simple, "count(tid)#all", nil, "", nil, &countVal, "tid")
+		if err != nil || countVal < 1 {
+			t.Error(err)
+			return
+		}
+		fmt.Println(countVal)
 	}
 	{
 		var countVal int64
 		err = CountSimple(NewPoolQueryer(), simple, "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fmt.Println(countVal)
+		err = Default.CountSimple(NewPoolQueryer(), simple, "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1040,9 +1189,15 @@ func TestUnify(t *testing.T) {
 	fmt.Println("AppendWhereUnify-->", strings.Join(where, " and "), args)
 	sql, args := JoinWhereUnify("select tid from crud_simple", nil, once)
 	fmt.Println("JoinWhereUnify-->", sql, args)
+	sql, args = Default.JoinWhereUnify("select tid from crud_simple", nil, once)
+	fmt.Println("JoinWhereUnify-->", sql, args)
 	sql = JoinPageUnify(sql, once)
 	fmt.Println("JoinPageUnify-->", sql)
+	sql = Default.JoinPageUnify(sql, once)
+	fmt.Println("JoinPageUnify-->", sql)
 	sql, args = QueryUnifySQL(once)
+	fmt.Println("QueryUnifySQL-->", sql, args)
+	sql, args = Default.QueryUnifySQL(once)
 	fmt.Println("QueryUnifySQL-->", sql, args)
 	modelValue, queryFilter, dests := ScanUnifyDest(once)
 	if modelValue != &once.Model || queryFilter != "#all" || len(dests) != 3 {
@@ -1050,6 +1205,8 @@ func TestUnify(t *testing.T) {
 		return
 	}
 	sql, args = CountUnifySQL(once)
+	fmt.Println("CountUnifySQL-->", sql, args)
+	sql, args = Default.CountUnifySQL(once)
 	fmt.Println("CountUnifySQL-->", sql, args)
 	modelValue, queryFilter, dests = CountUnifyDest(once)
 	if modelValue != &once.Model || queryFilter != "count(tid)#all" || len(dests) != 2 {
@@ -1060,6 +1217,18 @@ func TestUnify(t *testing.T) {
 	once.Query.Simples = nil
 	once.Query.UserIDs = nil
 	err = QueryUnify(NewPoolQueryer(), once)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	fmt.Println("QueryUnify-->", jsonString(once))
+	if len(once.Query.UserIDs) != 3 || len(once.Query.Simples) != 3 {
+		t.Error("error")
+		return
+	}
+	once.Query.Simples = nil
+	once.Query.UserIDs = nil
+	err = Default.QueryUnify(NewPoolQueryer(), once)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1096,6 +1265,18 @@ func TestUnify(t *testing.T) {
 		t.Error("error")
 		return
 	}
+	once.Query.Simples = nil
+	once.Query.UserIDs = nil
+	err = Default.QueryUnifyRow(NewPoolQueryer(), once)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	fmt.Println("QueryUnifyRow-->", jsonString(once))
+	if len(once.Query.UserIDs) != 1 || len(once.Query.Simples) != 1 {
+		t.Error("error")
+		return
+	}
 
 	once.Query.Simples = nil
 	once.Query.UserIDs = nil
@@ -1114,6 +1295,18 @@ func TestUnify(t *testing.T) {
 	once.Query.Simples = nil
 	once.Query.UserIDs = nil
 	err = CountUnify(NewPoolQueryer(), once)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	fmt.Println("CountUnify-->", jsonString(once))
+	if once.Count.All < 1 {
+		t.Error("error")
+		return
+	}
+	once.Query.Simples = nil
+	once.Query.UserIDs = nil
+	err = Default.CountUnify(NewPoolQueryer(), once)
 	if err != nil {
 		t.Error(err)
 		return
