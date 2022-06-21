@@ -1440,21 +1440,26 @@ func (c *CRUD) countUnify(caller int, queryer, v interface{}) (err error) {
 }
 
 func ApplyUnify(queryer, v interface{}) (err error) {
-	err = Default.ApplyUnify(queryer, v)
+	err = Default.applyUnify(1, queryer, v)
 	return
 }
 
 func (c *CRUD) ApplyUnify(queryer, v interface{}) (err error) {
+	err = c.applyUnify(1, queryer, v)
+	return
+}
+
+func (c *CRUD) applyUnify(caller int, queryer, v interface{}) (err error) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	if _, ok := reflectType.FieldByName("Query"); ok && err == nil {
-		err = c.queryUnify(1, queryer, v)
+		err = c.queryUnify(caller+1, queryer, v)
 	}
 	if _, ok := reflectType.FieldByName("QueryRow"); ok && err == nil {
-		err = c.queryUnifyRow(1, queryer, v)
+		err = c.queryUnifyRow(caller+1, queryer, v)
 	}
 	if _, ok := reflectType.FieldByName("Count"); ok && err == nil {
-		err = c.countUnify(1, queryer, v)
+		err = c.countUnify(caller+1, queryer, v)
 	}
 	return
 }

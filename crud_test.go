@@ -1378,6 +1378,18 @@ func TestUnify(t *testing.T) {
 		t.Error("error")
 		return
 	}
+	list.Query.Simples = nil
+	list.Query.UserIDs = nil
+	err = Default.ApplyUnify(NewPoolQueryer(), list)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	fmt.Println("ApplyUnify-->", jsonString(list))
+	if len(list.Query.UserIDs) != 3 || len(list.Query.Simples) != 3 || list.Count.All < 1 || list.Count.UserID < 1 {
+		t.Error("error")
+		return
+	}
 }
 
 func TestError(t *testing.T) {
