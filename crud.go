@@ -344,7 +344,7 @@ func AppendSetf(sets []string, args []interface{}, formats string, v ...interfac
 func (c *CRUD) AppendSetf(sets []string, args []interface{}, formats string, v ...interface{}) (sets_ []string, args_ []interface{}) {
 	sets_, args_ = sets, args
 	c.FilterFormatCall(formats, v, func(format string, arg interface{}) {
-		args_ = append(args_, c.ParmConv("update", format, "", reflect.StructField{}, v))
+		args_ = append(args_, c.ParmConv("update", format, "", reflect.StructField{}, arg))
 		sets_ = append(sets_, c.Sprintf(format, len(args_)))
 	})
 	return
