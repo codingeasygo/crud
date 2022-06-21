@@ -1313,18 +1313,22 @@ func CountUnifyDest(v interface{}) (modelValue interface{}, queryFilter string, 
 func (c *CRUD) CountUnifyDest(v interface{}) (modelValue interface{}, queryFilter string, dests []interface{}) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
-	modelValue = reflectValue.FieldByName("Model").Addr().Interface()
+	modelValueList := []interface{}{
+		TableName(c.Table(reflectValue.FieldByName("Model").Addr().Interface())),
+	}
 	queryType, _ := reflectType.FieldByName("Count")
 	queryValue := reflectValue.FieldByName("Count")
 	queryFilter = queryType.Tag.Get("filter")
 	queryNum := queryType.Type.NumField()
 	for i := 0; i < queryNum; i++ {
+		modelValueList = append(modelValueList, queryValue.Field(i).Interface())
 		dests = append(dests, queryValue.Field(i).Addr().Interface())
 		scan := queryType.Type.Field(i).Tag.Get("scan")
 		if len(scan) > 0 {
 			dests = append(dests, scan)
 		}
 	}
+	modelValue = modelValueList
 	return
 }
 

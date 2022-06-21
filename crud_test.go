@@ -1170,8 +1170,9 @@ type OnceQueryer struct {
 		UserIDs []int64   `json:"user_ids" scan:"user_id#all"`
 	} `json:"query" filter:"#all"`
 	Count struct {
-		All int64 `json:"all" scan:"tid"`
-	} `json:"count" filter:"count(tid)#all"`
+		All    int64 `json:"all" scan:"tid"`
+		UserID int64 `json:"user_id" scan:"user_id"`
+	} `json:"count" filter:"count(tid),max(user_id)#all"`
 }
 
 func TestUnify(t *testing.T) {
@@ -1206,8 +1207,8 @@ func TestUnify(t *testing.T) {
 	sql, args = Default.CountUnifySQL(once)
 	fmt.Println("CountUnifySQL-->", sql, args)
 	modelValue, queryFilter, dests = CountUnifyDest(once)
-	if modelValue != &once.Model || queryFilter != "count(tid)#all" || len(dests) != 2 {
-		t.Error("error")
+	if len(modelValue.([]interface{})) != 3 || queryFilter != "count(tid),max(user_id)#all" || len(dests) != 4 {
+		t.Errorf("%v,%v,%v", len(modelValue.([]interface{})), queryFilter, len(dests))
 		return
 	}
 
@@ -1297,7 +1298,7 @@ func TestUnify(t *testing.T) {
 		return
 	}
 	fmt.Println("CountUnify-->", jsonString(once))
-	if once.Count.All < 1 {
+	if once.Count.All < 1 || once.Count.UserID < 1 {
 		t.Error("error")
 		return
 	}
@@ -1309,7 +1310,7 @@ func TestUnify(t *testing.T) {
 		return
 	}
 	fmt.Println("CountUnify-->", jsonString(once))
-	if once.Count.All < 1 {
+	if once.Count.All < 1 || once.Count.UserID < 1 {
 		t.Error("error")
 		return
 	}
