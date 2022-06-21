@@ -867,17 +867,20 @@ func (c *CRUD) ScanArgs(v interface{}, filter string) (args []interface{}) {
 	return
 }
 
-func ScanUnifyDest(v interface{}) (modelValue interface{}, queryFilter string, dests []interface{}) {
-	modelValue, queryFilter, dests = Default.ScanUnifyDest(v)
+func ScanUnifyDest(v interface{}, queryName string) (modelValue interface{}, queryFilter string, dests []interface{}) {
+	modelValue, queryFilter, dests = Default.ScanUnifyDest(v, queryName)
 	return
 }
 
-func (c *CRUD) ScanUnifyDest(v interface{}) (modelValue interface{}, queryFilter string, dests []interface{}) {
+func (c *CRUD) ScanUnifyDest(v interface{}, queryName string) (modelValue interface{}, queryFilter string, dests []interface{}) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	modelValue = reflectValue.FieldByName("Model").Addr().Interface()
-	queryType, _ := reflectType.FieldByName("Query")
-	queryValue := reflectValue.FieldByName("Query")
+	queryType, _ := reflectType.FieldByName(queryName)
+	queryValue := reflectValue.FieldByName(queryName)
+	if !queryValue.IsValid() {
+		panic(fmt.Sprintf("%v is not exits in %v", queryName, reflectType))
+	}
 	queryFilter = queryType.Tag.Get("filter")
 	queryNum := queryType.Type.NumField()
 	for i := 0; i < queryNum; i++ {
@@ -1071,7 +1074,7 @@ func ScanUnify(rows Rows, v interface{}) (err error) {
 }
 
 func (c *CRUD) ScanUnify(rows Rows, v interface{}) (err error) {
-	modelValue, modelFilter, dests := c.ScanUnifyDest(v)
+	modelValue, modelFilter, dests := c.ScanUnifyDest(v, "Query")
 	err = c.Scan(rows, modelValue, modelFilter, dests...)
 	return
 }
@@ -1192,7 +1195,7 @@ func ScanUnifyRow(row Row, v interface{}) (err error) {
 }
 
 func (c *CRUD) ScanUnifyRow(row Row, v interface{}) (err error) {
-	modelValue, modelFilter, dests := c.ScanUnifyDest(v)
+	modelValue, modelFilter, dests := c.ScanUnifyDest(v, "QueryRow")
 	err = c.ScanRow(row, modelValue, modelFilter, dests...)
 	return
 }
@@ -1432,6 +1435,26 @@ func (c *CRUD) countUnify(caller int, queryer, v interface{}) (err error) {
 	}
 	if c.Verbose {
 		c.Log(caller, "CRUD count unify by struct:%v,sql:%v,args:%v, result is success", reflect.TypeOf(v), sql, jsonString(args))
+	}
+	return
+}
+
+func ApplyUnify(queryer, v interface{}) (err error) {
+	err = Default.ApplyUnify(queryer, v)
+	return
+}
+
+func (c *CRUD) ApplyUnify(queryer, v interface{}) (err error) {
+	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
+	if _, ok := reflectType.FieldByName("Query"); ok && err == nil {
+		err = c.queryUnify(1, queryer, v)
+	}
+	if _, ok := reflectType.FieldByName("QueryRow"); ok && err == nil {
+		err = c.queryUnifyRow(1, queryer, v)
+	}
+	if _, ok := reflectType.FieldByName("Count"); ok && err == nil {
+		err = c.countUnify(1, queryer, v)
 	}
 	return
 }
