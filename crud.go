@@ -7,6 +7,8 @@ import (
 	"log"
 	"reflect"
 	"strings"
+
+	"github.com/codingeasygo/util/attrscan"
 )
 
 type NilChecker interface {
@@ -55,14 +57,16 @@ func MetaWith(o interface{}, fields ...interface{}) (v []interface{}) {
 }
 
 var Default = &CRUD{
-	Tag:       "json",
+	Scanner: attrscan.Scanner{
+		Tag: "json",
+		NameConv: func(on, name string, field reflect.StructField) string {
+			return name
+		},
+	},
 	ArgFormat: "$%v",
 	ErrNoRows: fmt.Errorf("no rows"),
 	Log: func(caller int, format string, args ...interface{}) {
 		log.Output(caller+3, fmt.Sprintf(format, args...))
-	},
-	NameConv: func(on, name string, field reflect.StructField) string {
-		return name
 	},
 	ParmConv: func(on, fieldName, fieldFunc string, field reflect.StructField, value interface{}) interface{} {
 		return value
@@ -75,12 +79,11 @@ type LogF func(caller int, format string, args ...interface{})
 type TableName string
 
 type CRUD struct {
-	Tag       string
+	attrscan.Scanner
 	ArgFormat string
 	ErrNoRows error
 	Verbose   bool
 	Log       LogF
-	NameConv  NameConv
 	ParmConv  ParmConv
 }
 
@@ -112,30 +115,6 @@ func (c *CRUD) Table(v interface{}) (table string) {
 		}
 	}
 	return
-}
-
-func (c *CRUD) checkValue(val reflect.Value, incNil, incZero bool) bool {
-	if !val.IsValid() {
-		return incNil
-	}
-	v := val.Interface()
-	if c, ok := v.(NilChecker); ok {
-		return !c.IsNil() || incNil
-	}
-	if c, ok := v.(ZeroChecker); ok {
-		return !c.IsZero() || incZero
-	}
-	kind := val.Kind()
-	if kind == reflect.Ptr && val.IsNil() && !incNil {
-		return false
-	}
-	if kind == reflect.Ptr && !val.IsNil() {
-		val = reflect.Indirect(val)
-	}
-	if (!val.IsValid() || val.IsZero()) && !incZero {
-		return false
-	}
-	return true
 }
 
 func (c *CRUD) Sprintf(format string, v int) string {
@@ -190,56 +169,8 @@ func (c *CRUD) FilterFieldCall(on string, v interface{}, filter string, call fun
 		call(fieldName, fieldFunc, reflect.StructField{}, v)
 		return
 	}
-	var fieldAll = map[string]string{}
-	var isExc = false
-	var incNil, incZero bool
-	if len(filter) > 0 {
-		filter = strings.TrimSpace(filter)
-		parts := strings.SplitN(filter, "#", 2)
-		isExc = strings.HasPrefix(parts[0], "^")
-		if len(parts[0]) > 0 {
-			for _, fieldItem := range strings.Split(strings.TrimPrefix(parts[0], "^"), ",") {
-				fieldParts := strings.SplitN(strings.Trim(strings.TrimSpace(fieldItem), ")"), "(", 2)
-				if len(fieldParts) > 1 {
-					fieldAll[fieldParts[1]] = fieldParts[0]
-				} else {
-					fieldAll[fieldParts[0]] = ""
-				}
-			}
-		}
-		if len(parts) > 1 && len(parts[1]) > 0 {
-			incNil = strings.Contains(","+parts[1]+",", ",nil,") || strings.Contains(","+parts[1]+",", ",all,")
-			incZero = strings.Contains(","+parts[1]+",", ",zero,") || strings.Contains(","+parts[1]+",", ",all,")
-		}
-	}
-	numField := reflectType.NumField()
-	for i := 0; i < numField; i++ {
-		fieldValue := reflectValue.Field(i)
-		fieldType := reflectType.Field(i)
-		if fieldType.Name == "_" {
-			if t := fieldType.Tag.Get("table"); len(t) > 0 {
-				table = t
-			}
-		}
-		fieldName := strings.SplitN(fieldType.Tag.Get(c.Tag), ",", 2)[0]
-		if len(fieldName) < 1 || fieldName == "-" {
-			continue
-		}
-		if _, ok := fieldAll[fieldName]; (isExc && ok) || (!isExc && len(fieldAll) > 0 && !ok) {
-			continue
-		}
-		filter := strings.TrimPrefix(fieldType.Tag.Get("filter"), "#")
-		fieldIncNil, fieldIncZero := incNil, incZero
-		if len(filter) > 0 {
-			fieldIncNil = strings.Contains(","+filter+",", ",nil,") || strings.Contains(","+filter+",", ",all,")
-			fieldIncZero = strings.Contains(","+filter+",", ",zero,") || strings.Contains(","+filter+",", ",all,")
-		}
-		if !c.checkValue(fieldValue, fieldIncNil, fieldIncZero) {
-			continue
-		}
-		fieldName = c.NameConv(on, fieldName, fieldType)
-		call(fieldName, fieldAll[fieldName], fieldType, fieldValue.Addr().Interface())
-	}
+	table = c.Table(v)
+	c.Scanner.FilterFieldCall(on, v, filter, call)
 	return
 }
 
@@ -260,7 +191,7 @@ func (c *CRUD) FilterFormatCall(formats string, args []interface{}, call func(fo
 	}
 	for i, format := range formatList {
 		arg := args[i]
-		if !c.checkValue(reflect.ValueOf(arg), incNil, incZero) {
+		if !c.Scanner.CheckValue(reflect.ValueOf(arg), incNil, incZero) {
 			continue
 		}
 		call(format, arg)
