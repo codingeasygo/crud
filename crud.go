@@ -855,7 +855,7 @@ func (c *CRUD) destSet(value reflect.Value, filter string, dests ...interface{})
 		k := targetValue.NumField()
 		for i := 0; i < k; i++ {
 			field := targetType.Field(i)
-			fieldName := field.Tag.Get(c.Tag)
+			fieldName := strings.SplitN(field.Tag.Get(c.Tag), ",", 2)[0]
 			if fieldName == key {
 				v = targetValue.Field(i)
 				return
