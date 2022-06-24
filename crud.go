@@ -815,8 +815,11 @@ func (c *CRUD) ScanUnifyDest(v interface{}, queryName string) (modelValue interf
 	queryFilter = queryType.Tag.Get("filter")
 	queryNum := queryType.Type.NumField()
 	for i := 0; i < queryNum; i++ {
-		dests = append(dests, queryValue.Field(i).Addr().Interface())
 		scan := queryType.Type.Field(i).Tag.Get("scan")
+		if scan == "-" {
+			continue
+		}
+		dests = append(dests, queryValue.Field(i).Addr().Interface())
 		if len(scan) > 0 {
 			dests = append(dests, scan)
 		}
@@ -1276,9 +1279,12 @@ func (c *CRUD) CountUnifyDest(v interface{}) (modelValue interface{}, queryFilte
 	queryFilter = queryType.Tag.Get("filter")
 	queryNum := queryType.Type.NumField()
 	for i := 0; i < queryNum; i++ {
+		scan := queryType.Type.Field(i).Tag.Get("scan")
+		if scan == "-" {
+			continue
+		}
 		modelValueList = append(modelValueList, queryValue.Field(i).Interface())
 		dests = append(dests, queryValue.Field(i).Addr().Interface())
-		scan := queryType.Type.Field(i).Tag.Get("scan")
 		if len(scan) > 0 {
 			dests = append(dests, scan)
 		}
@@ -1382,15 +1388,23 @@ func (c *CRUD) ApplyUnify(queryer, v interface{}) (err error) {
 
 func (c *CRUD) applyUnify(caller int, queryer, v interface{}) (err error) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
-	reflectType := reflectValue.Type()
-	if _, ok := reflectType.FieldByName("Query"); ok && err == nil {
-		err = c.queryUnify(caller+1, queryer, v)
+	if value := reflectValue.FieldByName("Query"); value.IsValid() && err == nil {
+		enabled := value.FieldByName("Enabled")
+		if enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
+			err = c.queryUnify(caller+1, queryer, v)
+		}
 	}
-	if _, ok := reflectType.FieldByName("QueryRow"); ok && err == nil {
-		err = c.queryUnifyRow(caller+1, queryer, v)
+	if value := reflectValue.FieldByName("QueryRow"); value.IsValid() && err == nil {
+		enabled := value.FieldByName("Enabled")
+		if enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
+			err = c.queryUnifyRow(caller+1, queryer, v)
+		}
 	}
-	if _, ok := reflectType.FieldByName("Count"); ok && err == nil {
-		err = c.countUnify(caller+1, queryer, v)
+	if value := reflectValue.FieldByName("Count"); value.IsValid() && err == nil {
+		enabled := value.FieldByName("Enabled")
+		if enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
+			err = c.countUnify(caller+1, queryer, v)
+		}
 	}
 	return
 }

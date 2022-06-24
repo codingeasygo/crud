@@ -1166,12 +1166,14 @@ type ListSimpleUnify struct {
 		Limit  int    `json:"limit"`
 	} `json:"page"`
 	Query struct {
+		Enabled bool      `json:"enabled" scan:"-"`
 		Simples []*Simple `json:"simples"`
 		UserIDs []int64   `json:"user_ids" scan:"user_id#all"`
 	} `json:"query" filter:"#all"`
 	Count struct {
-		All    int64 `json:"all" scan:"tid"`
-		UserID int64 `json:"user_id" scan:"user_id"`
+		Enabled bool  `json:"enabled" scan:"-"`
+		All     int64 `json:"all" scan:"tid"`
+		UserID  int64 `json:"user_id" scan:"user_id"`
 	} `json:"count" filter:"count(tid),max(user_id)#all"`
 }
 
@@ -1188,8 +1190,9 @@ type FindSimpleUnify struct {
 		Empty  int   `json:"empty"`
 	} `json:"where" join:"and"`
 	QueryRow struct {
-		Simple *Simple `json:"simple"`
-		UserID int64   `json:"user_id" scan:"user_id#all"`
+		Enabled bool    `json:"enabled" scan:"-"`
+		Simple  *Simple `json:"simple"`
+		UserID  int64   `json:"user_id" scan:"user_id#all"`
 	} `json:"query" filter:"#all"`
 }
 
@@ -1201,12 +1204,15 @@ func TestUnify(t *testing.T) {
 	list.Where.Key.Title = "%a%"
 	list.Where.Key.Data = "%a%"
 	list.Where.Status = []int{10, 100}
+	list.Query.Enabled = true
+	list.Count.Enabled = true
 	find := &FindSimpleUnify{}
 	find.Where.UserID = 100
 	find.Where.Type = 10
 	find.Where.Key.Title = "%a%"
 	find.Where.Key.Data = "%a%"
 	find.Where.Status = []int{10, 100}
+	find.QueryRow.Enabled = true
 
 	//
 	where, args := AppendWhereUnify(nil, nil, list)
@@ -1225,7 +1231,7 @@ func TestUnify(t *testing.T) {
 	fmt.Println("QueryUnifySQL-->", sql, args)
 	modelValue, queryFilter, dests := ScanUnifyDest(list, "Query")
 	if modelValue != &list.Model || queryFilter != "#all" || len(dests) != 3 {
-		t.Error("error")
+		t.Errorf("%v,%v,%v", reflect.TypeOf(modelValue), queryFilter, len(dests))
 		return
 	}
 	sql, args = CountUnifySQL(list)
