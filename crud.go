@@ -1421,19 +1421,19 @@ func (c *CRUD) applyUnify(caller int, queryer, v interface{}) (err error) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	if value := reflectValue.FieldByName("Query"); value.IsValid() && err == nil {
 		enabled := value.FieldByName("Enabled")
-		if enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
+		if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
 			err = c.queryUnify(caller+1, queryer, v)
 		}
 	}
 	if value := reflectValue.FieldByName("QueryRow"); value.IsValid() && err == nil {
 		enabled := value.FieldByName("Enabled")
-		if enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
+		if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
 			err = c.queryUnifyRow(caller+1, queryer, v)
 		}
 	}
 	if value := reflectValue.FieldByName("Count"); value.IsValid() && err == nil {
 		enabled := value.FieldByName("Enabled")
-		if enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
+		if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
 			err = c.countUnify(caller+1, queryer, v)
 		}
 	}
