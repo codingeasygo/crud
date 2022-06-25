@@ -1146,6 +1146,15 @@ func TestCount(t *testing.T) {
 		}
 		fmt.Println(countVal)
 	}
+	{
+		var countVal int64
+		err = CountSimple(NewPoolQueryer(), MetaWith(simple, countVal), "s.count(tid)#all", "where s.tid>$1", []interface{}{1}, &countVal, "tid")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fmt.Println(countVal)
+	}
 }
 
 func TestScan(t *testing.T) {
