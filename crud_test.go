@@ -364,6 +364,23 @@ func TestFilterField(t *testing.T) {
 		}
 	}
 	{
+		table, fields := QueryField(simple, "t.tid#all")
+		if table != "crud_simple t" || len(fields) != 1 || fields[0] != "t.tid" {
+			t.Error("error")
+			return
+		}
+		table, fields = QueryField(MetaWith(simple, int64(0)), "t.tid#all")
+		if table != "crud_simple t" || len(fields) != 1 || fields[0] != "t.tid" {
+			t.Error("error")
+			return
+		}
+		table, fields = QueryField(int64(0), "t.tid#all")
+		if table != "" || len(fields) != 1 || fields[0] != "t.tid" {
+			t.Error("error")
+			return
+		}
+	}
+	{
 		table = FilterFieldCall("test", simple, "#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		})
 		if table != "crud_simple" {

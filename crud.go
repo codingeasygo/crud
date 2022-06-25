@@ -136,11 +136,21 @@ func (c *CRUD) FilterFieldCall(on string, v interface{}, filter string, call fun
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	if v, ok := v.([]interface{}); ok {
+		var tableAlias, fieldAlias string
+		parts := strings.SplitN(filter, ".", 2)
+		if len(parts) > 1 {
+			tableAlias = parts[0]
+			fieldAlias = parts[0] + "."
+			filter = parts[1]
+		}
 		filterFields := strings.Split(strings.TrimSpace(strings.SplitN(filter, "#", 2)[0]), ",")
 		offset := 0
 		for _, f := range v {
 			if tableName, ok := f.(TableName); ok {
 				table = string(tableName)
+				if len(tableAlias) > 0 {
+					table = table + " " + tableAlias
+				}
 				continue
 			}
 			if offset >= len(filterFields) {
@@ -153,12 +163,18 @@ func (c *CRUD) FilterFieldCall(on string, v interface{}, filter string, call fun
 				fieldName = fieldParts[1]
 				fieldFunc = fieldParts[0]
 			}
-			call(fieldName, fieldFunc, reflect.StructField{}, f)
+			call(fieldAlias+fieldName, fieldFunc, reflect.StructField{}, f)
 			offset++
 		}
 		return
 	}
 	if reflectType.Kind() != reflect.Struct {
+		var fieldAlias string
+		parts := strings.SplitN(filter, ".", 2)
+		if len(parts) > 1 {
+			fieldAlias = parts[0] + "."
+			filter = parts[1]
+		}
 		fieldParts := strings.SplitN(strings.Trim(strings.TrimSpace(strings.SplitN(filter, "#", 2)[0]), ")"), "(", 2)
 		fieldName := fieldParts[0]
 		fieldFunc := ""
@@ -166,10 +182,14 @@ func (c *CRUD) FilterFieldCall(on string, v interface{}, filter string, call fun
 			fieldName = fieldParts[1]
 			fieldFunc = fieldParts[0]
 		}
-		call(fieldName, fieldFunc, reflect.StructField{}, v)
+		call(fieldAlias+fieldName, fieldFunc, reflect.StructField{}, v)
 		return
 	}
 	table = c.Table(v)
+	parts := strings.SplitN(filter, ".", 2)
+	if len(parts) > 1 {
+		table = table + " " + parts[0]
+	}
 	c.Scanner.FilterFieldCall(on, v, filter, call)
 	return
 }
