@@ -850,6 +850,10 @@ func (c *CRUD) ScanUnifyDest(v interface{}, queryName string) (modelValue interf
 func (c *CRUD) destSet(value reflect.Value, filter string, dests ...interface{}) (err error) {
 	valueField := func(key string) (v reflect.Value, e error) {
 		if _, ok := value.Interface().([]interface{}); ok {
+			parts := strings.SplitN(filter, ".", 2)
+			if len(parts) > 1 {
+				filter = parts[1]
+			}
 			filterFields := strings.Split(strings.TrimSpace(strings.SplitN(filter, "#", 2)[0]), ",")
 			indexField := -1
 			for i, filterField := range filterFields {
