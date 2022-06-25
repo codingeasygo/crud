@@ -874,12 +874,25 @@ func TestQuery(t *testing.T) {
 	}, "", "\t")
 	fmt.Println("-->\n", string(data))
 
+	simple = nil
 	err = QueryRow(
 		NewPoolQueryer(), &Simple{}, "#all",
 		"sql", []interface{}{"arg"},
 		&simple,
 	)
-	if err != nil {
+	if err != nil || simple == nil {
+		t.Error(err)
+		return
+	}
+
+	simple = &Simple{}
+	err = QueryRow(
+		NewPoolQueryer(), &Simple{}, "#all",
+		"sql", []interface{}{"arg"},
+		simple,
+	)
+	if err != nil || simple == nil || simple.TID < 1 {
+		t.Error(err)
 		return
 	}
 

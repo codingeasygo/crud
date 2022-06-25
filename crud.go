@@ -877,6 +877,13 @@ func (c *CRUD) destSet(value reflect.Value, filter string, dests ...interface{})
 			destValue.Set(value)
 			continue
 		}
+		if value.Kind() == reflect.Ptr {
+			indirectValue := reflect.Indirect(value)
+			if destType == indirectValue.Type() {
+				destValue.Set(indirectValue)
+				continue
+			}
+		}
 		switch destKind {
 		case reflect.Func:
 			destValue.Call([]reflect.Value{value})
