@@ -225,18 +225,21 @@ func (c *CRUD) FilterWhere(args []interface{}, v interface{}) (where_ []string, 
 			var cmpInner []string
 			cmpInner, args_ = c.FilterWhere(args_, fieldValue)
 			cmpSep := field.Tag.Get("join")
-			where_ = append(where_, strings.Join(cmpInner, " "+cmpSep+" "))
+			where_ = append(where_, "("+strings.Join(cmpInner, " "+cmpSep+" ")+")")
 			return
 		}
 		cmp := field.Tag.Get("cmp")
 		if len(cmp) < 1 {
-			cmp = "= " + c.ArgFormat
+			cmp = fieldName + " = " + c.ArgFormat
 		}
 		if !strings.Contains(cmp, c.ArgFormat) {
 			cmp += " " + c.ArgFormat
 		}
+		if (strings.Contains(cmp, " or ") || strings.Contains(cmp, " and ")) && !strings.HasPrefix(cmp, "(") {
+			cmp = "(" + cmp + ")"
+		}
 		args_ = append(args_, c.ParmConv("where", fieldName, fieldFunc, field, fieldValue))
-		where_ = append(where_, c.Sprintf(fieldName+" "+cmp, len(args_)))
+		where_ = append(where_, c.Sprintf(cmp, len(args_)))
 	})
 	return
 }

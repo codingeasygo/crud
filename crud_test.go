@@ -1193,10 +1193,10 @@ type ListSimpleUnify struct {
 		UserID int64 `json:"user_id"`
 		Type   int   `json:"type" filter:"#all"`
 		Key    struct {
-			Title string `json:"title" cmp:"like"`
-			Data  string `json:"data" cmp:"like"`
+			Title string `json:"title" cmp:"title like $%v"`
+			Data  string `json:"data" cmp:"data like $%v"`
 		} `json:"key" join:"or"`
-		Status []int `cmp:"any($%v)"`
+		Status []int `cmp:"status=any($%v)"`
 		Empty  int
 	} `json:"where" join:"and"`
 	Page struct {
@@ -1219,14 +1219,11 @@ type ListSimpleUnify struct {
 type FindSimpleUnify struct {
 	Model Simple `json:"model"`
 	Where struct {
-		UserID int64 `json:"user_id"`
-		Type   int   `json:"type" filter:"#all"`
-		Key    struct {
-			Title string `json:"title" cmp:"like"`
-			Data  string `json:"data" cmp:"like"`
-		} `json:"key" join:"or"`
-		Status []int `json:"status" cmp:"any($%v)"`
-		Empty  int   `json:"empty"`
+		UserID int64  `json:"user_id" cmp:"user_id >"`
+		Type   int    `json:"type" filter:"#all"`
+		Key    string `json:"key" cmp:"title like $%v or data like $%v"`
+		Status []int  `json:"status" cmp:"any($%v)"`
+		Empty  int    `json:"empty"`
 	} `json:"where" join:"and"`
 	QueryRow struct {
 		Enabled bool    `json:"enabled" scan:"-"`
@@ -1248,8 +1245,7 @@ func TestUnify(t *testing.T) {
 	find := &FindSimpleUnify{}
 	find.Where.UserID = 100
 	find.Where.Type = 10
-	find.Where.Key.Title = "%a%"
-	find.Where.Key.Data = "%a%"
+	find.Where.Key = "%a%"
 	find.Where.Status = []int{10, 100}
 	find.QueryRow.Enabled = true
 
@@ -1448,8 +1444,7 @@ func TestError(t *testing.T) {
 	find := &FindSimpleUnify{}
 	find.Where.UserID = 100
 	find.Where.Type = 10
-	find.Where.Key.Title = "%a%"
-	find.Where.Key.Data = "%a%"
+	find.Where.Key = "%a%"
 	find.Where.Status = []int{10, 100}
 	{ //insert error
 		simple := &Simple{}
