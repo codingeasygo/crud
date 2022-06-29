@@ -164,8 +164,9 @@ func (g *Gen) AsStruct(t *Table) (s *Struct) {
 	}
 	for _, col := range t.Columns {
 		field := &Field{
-			Tag:    col.Name,
-			Column: col,
+			Tag:     col.Name,
+			Comment: col.Comment,
+			Column:  col,
 		}
 		field.Name = g.NameConv(false, col.Name)
 		field.Type = g.TypeConv(g.TypeMap, s, col)
