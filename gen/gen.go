@@ -36,12 +36,14 @@ func ConvSizeTrim(typeMap map[string][]string, s *Struct, column *Column) (resul
 	return
 }
 
-func ConvKeyValueOption(s *Struct, field *Field) (result []*Option) {
+func ConvKeyValueOption(s *Struct, field *Field) (remain string, result []*Option) {
+	remainAll := []string{}
 	for _, comment := range strings.Split(field.Comment, ",") {
 		comment = strings.TrimSpace(comment)
 		parts := strings.SplitN(comment, ":", 2)
 		kv := strings.SplitN(parts[0], "=", 2)
 		if len(kv) < 2 {
+			remainAll = append(remainAll, comment)
 			continue
 		}
 		key := strings.Trim(strings.TrimSpace(kv[0]), `"`)
@@ -59,6 +61,7 @@ func ConvKeyValueOption(s *Struct, field *Field) (result []*Option) {
 			Comment: comment,
 		})
 	}
+	remain = strings.Join(remainAll, ",")
 	return
 }
 
@@ -97,7 +100,7 @@ func Query(queryer interface{}, tableSQL, columnSQL, schema string) (tables []*T
 
 type NameConv func(isTable bool, name string) string
 type TypeConv func(typeMap map[string][]string, s *Struct, column *Column) string
-type OptionConv func(s *Struct, field *Field) []*Option
+type OptionConv func(s *Struct, field *Field) (comment string, options []*Option)
 
 type Option struct {
 	Name    string
@@ -161,13 +164,12 @@ func (g *Gen) AsStruct(t *Table) (s *Struct) {
 	}
 	for _, col := range t.Columns {
 		field := &Field{
-			Tag:     col.Name,
-			Comment: col.Comment,
-			Column:  col,
+			Tag:    col.Name,
+			Column: col,
 		}
 		field.Name = g.NameConv(false, col.Name)
 		field.Type = g.TypeConv(g.TypeMap, s, col)
-		field.Options = g.OptionConv(s, field)
+		field.Comment, field.Options = g.OptionConv(s, field)
 		s.Fields = append(s.Fields, field)
 	}
 	return
