@@ -221,11 +221,11 @@ func (c *CRUD) FilterFormatCall(formats string, args []interface{}, call func(fo
 func (c *CRUD) FilterWhere(args []interface{}, v interface{}) (where_ []string, args_ []interface{}) {
 	args_ = args
 	c.FilterFieldCall("where", v, "", func(fieldName, fieldFunc string, field reflect.StructField, fieldValue interface{}) {
-		if field.Type.Kind() == reflect.Struct {
+		join := field.Tag.Get("join")
+		if field.Type.Kind() == reflect.Struct && len(join) > 0 {
 			var cmpInner []string
 			cmpInner, args_ = c.FilterWhere(args_, fieldValue)
-			cmpSep := field.Tag.Get("join")
-			where_ = append(where_, "("+strings.Join(cmpInner, " "+cmpSep+" ")+")")
+			where_ = append(where_, "("+strings.Join(cmpInner, " "+join+" ")+")")
 			return
 		}
 		cmp := field.Tag.Get("cmp")
