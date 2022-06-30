@@ -641,7 +641,7 @@ func TestUpdate(t *testing.T) {
 	where, args = AppendWhere(where, args, simple.TID > 0, "tid=$%v", simple.TID)
 	where, args = AppendWhere(where, args, simple.UserID > 0, "user_id=$%v", simple.UserID)
 
-	updateSQL = JoinWhere(updateSQL, where, "and")
+	updateSQL = JoinWhere(updateSQL, where, "and", "limit 1")
 	fmt.Printf("update\n")
 	fmt.Printf("   --->%v\n", updateSQL)
 	fmt.Printf("   --->%v\n", args)
@@ -732,22 +732,22 @@ func TestUpdate(t *testing.T) {
 		return
 	}
 
-	_, err = UpdateSimple(NewPoolQueryer(), simple, "title,image,update_time,status", "", nil)
+	_, err = UpdateWheref(NewPoolQueryer(), simple, "title,image,update_time,status", "", "")
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	_, err = Default.UpdateSimple(NewPoolQueryer(), simple, "title,image,update_time,status", "", nil)
+	_, err = Default.UpdateWheref(NewPoolQueryer(), simple, "title,image,update_time,status", "", "")
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	err = UpdateSimpleRow(NewPoolQueryer(), simple, "title,image,update_time,status", "where tid=$1", []interface{}{1})
+	err = UpdateRowWheref(NewPoolQueryer(), simple, "title,image,update_time,status", "tid=$%v", 1)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	err = Default.UpdateSimpleRow(NewPoolQueryer(), simple, "title,image,update_time,status", "where tid=$1", []interface{}{1})
+	err = Default.UpdateRowWheref(NewPoolQueryer(), simple, "title,image,update_time,status", "tid=$%v", 1)
 	if err != nil {
 		t.Error(err)
 		return
@@ -767,7 +767,24 @@ func TestSearch(t *testing.T) {
 	simple := &Simple{}
 	var where []string
 	var args []interface{}
-	querySQL := QuerySQL(simple, "#nil,zero")
+	//
+	sql, args := JoinWheref("", nil, "tid>$%v,a=$%v", 1, 2)
+	if !strings.Contains(sql, "tid>$1 and a=$2") || len(args) != 2 {
+		t.Error("error")
+		return
+	}
+	sql, args = JoinWheref("", nil, "or:tid>$%v,a=$%v", 1, 2)
+	if !strings.Contains(sql, "tid>$1 or a=$2") || len(args) != 2 {
+		t.Error("error")
+		return
+	}
+	sql, args = Default.JoinWheref("", nil, "or:tid>$%v,a=$%v", 1, 2)
+	if !strings.Contains(sql, "tid>$1 or a=$2") || len(args) != 2 {
+		t.Error("error")
+		return
+	}
+	//
+	querySQL := QuerySQL(simple, "#nil,zero", "limit 1")
 	where, args = AppendWhere(where, args, true, "user_id=$%v", userID)
 	where, args = AppendWhere(where, args, true, "(title like $%v or data like $%v)", "%"+key+"%")
 	querySQL = JoinWhere(querySQL, where, "and")
@@ -994,7 +1011,7 @@ func TestQuery(t *testing.T) {
 	}
 	//
 	simpleList = []*Simple{}
-	err = QuerySimple(NewPoolQueryer(), &Simple{}, "#all", "", []interface{}{"arg"}, 0, 10, &simpleList)
+	err = QueryWheref(NewPoolQueryer(), &Simple{}, "#all", "tid>=$%v", []interface{}{1}, 0, 10, &simpleList)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1005,7 +1022,7 @@ func TestQuery(t *testing.T) {
 		return
 	}
 	simpleList = []*Simple{}
-	err = Default.QuerySimple(NewPoolQueryer(), &Simple{}, "#all", "", []interface{}{"arg"}, 0, 10, &simpleList)
+	err = Default.QueryWheref(NewPoolQueryer(), &Simple{}, "#all", "tid>=$%v", []interface{}{1}, 0, 10, &simpleList)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1015,12 +1032,12 @@ func TestQuery(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	err = QuerySimpleRow(NewPoolQueryer(), &Simple{}, "#all", "", []interface{}{"arg"}, &simple)
+	err = QueryRowWheref(NewPoolQueryer(), &Simple{}, "#all", "tid>=$%v", []interface{}{1}, &simple)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	err = Default.QuerySimpleRow(NewPoolQueryer(), &Simple{}, "#all", "", []interface{}{"arg"}, &simple)
+	err = Default.QueryRowWheref(NewPoolQueryer(), &Simple{}, "#all", "tid>=$%v", []interface{}{1}, &simple)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1052,6 +1069,10 @@ func TestCount(t *testing.T) {
 			return
 		}
 		if countSQL := Default.CountSQL(simple, "count(tid)#all"); !strings.Contains(countSQL, "count(tid)") {
+			t.Errorf("err:%v", countSQL)
+			return
+		}
+		if countSQL := Default.CountSQL(simple, "count(tid)#all", "limit 1"); !strings.Contains(countSQL, "count(tid)") {
 			t.Errorf("err:%v", countSQL)
 			return
 		}
@@ -1088,13 +1109,13 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal int64
-		err = CountSimple(NewPoolQueryer(), simple, "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		err = CountWheref(NewPoolQueryer(), simple, "count(tid)#all", "tid>$1", []interface{}{1}, &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
 		}
 		fmt.Println(countVal)
-		err = Default.CountSimple(NewPoolQueryer(), simple, "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		err = Default.CountWheref(NewPoolQueryer(), simple, "count(tid)#all", "tid>$1", []interface{}{1}, &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1103,7 +1124,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal *int64
-		err = CountSimple(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "tid>$1", []interface{}{1}, &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1112,7 +1133,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var typeVal *string
-		err = QuerySimpleRow(NewPoolQueryer(), MetaWith(simple, int64(0), int64(0), typeVal), "tid,user_id,type#all", "where tid>$1", []interface{}{1}, &typeVal, "type")
+		err = QueryRowWheref(NewPoolQueryer(), MetaWith(simple, int64(0), int64(0), typeVal), "tid,user_id,type#all", "tid>$1", []interface{}{1}, &typeVal, "type")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1121,7 +1142,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal int64
-		err = QuerySimpleRow(NewPoolQueryer(), MetaWith(simple, countVal), "tid#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		err = QueryRowWheref(NewPoolQueryer(), MetaWith(simple, countVal), "tid#all", "tid>$1", []interface{}{1}, &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1130,7 +1151,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var typeVal string
-		err = QuerySimpleRow(NewPoolQueryer(), MetaWith(simple, int64(0), int64(0), typeVal), "tid,user_id,type#all", "where tid>$1", []interface{}{1}, &typeVal, "type")
+		err = QueryRowWheref(NewPoolQueryer(), MetaWith(simple, int64(0), int64(0), typeVal), "tid,user_id,type#all", "tid>$1", []interface{}{1}, &typeVal, "type")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1139,7 +1160,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal int64
-		err = CountSimple(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "where tid>$1", []interface{}{1}, &countVal, "tid")
+		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "tid>$1", []interface{}{1}, &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1148,7 +1169,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal int64
-		err = CountSimple(NewPoolQueryer(), MetaWith(simple, countVal), "s.count(tid)#all", "where s.tid>$1", []interface{}{1}, &countVal, "tid")
+		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "s.count(tid)#all", "s.tid>$1", []interface{}{1}, &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1484,7 +1505,7 @@ func TestError(t *testing.T) {
 			t.Error("not error")
 			return
 		}
-		_, err = UpdateSimple(pool, simple, "title,image,update_time,status", "", nil)
+		_, err = UpdateWheref(pool, simple, "title,image,update_time,status", "")
 		if err == nil {
 			t.Error("not error")
 			return
@@ -1503,7 +1524,7 @@ func TestError(t *testing.T) {
 			t.Error("not error")
 			return
 		}
-		err = UpdateSimpleRow(pool, simple, "title,image,update_time,status", "", nil)
+		err = UpdateRowWheref(pool, simple, "title,image,update_time,status", "")
 		if err == nil {
 			t.Error("not error")
 			return
@@ -1673,7 +1694,7 @@ func TestError(t *testing.T) {
 
 		//
 		pool.QueryMode = "no"
-		err = CountSimple(pool, simple, "count(tid)#all", "", nil, &countValue, "tid")
+		err = CountWheref(pool, simple, "count(tid)#all", "", nil, &countValue, "tid")
 		if err != Default.ErrNoRows {
 			t.Error(err)
 			return
@@ -1681,7 +1702,7 @@ func TestError(t *testing.T) {
 
 		//
 		pool.QueryErr = fmt.Errorf("error")
-		err = CountSimple(pool, simple, "count(tid)#all", "", nil, &countValue, "tid")
+		err = CountWheref(pool, simple, "count(tid)#all", "", nil, &countValue, "tid")
 		if err == nil {
 			t.Error(err)
 			return
@@ -1700,13 +1721,13 @@ func TestError(t *testing.T) {
 		pool := NewPoolQueryer()
 
 		//
-		err = CountSimple(pool, simple, "count(tid)#all", "", nil, &countValue, "title#all")
+		err = CountWheref(pool, simple, "count(tid)#all", "", nil, &countValue, "title#all")
 		if err == nil || !strings.Contains(err.Error(), "not supported on dests[0] to set") {
 			t.Error(err)
 			return
 		}
 		//
-		err = CountSimple(pool, []interface{}{int64(0)}, "count(tid)#all", "", nil, &countValue, "none#all")
+		err = CountWheref(pool, []interface{}{int64(0)}, "count(tid)#all", "", nil, &countValue, "none#all")
 		if err == nil {
 			t.Error(err)
 			return

@@ -360,10 +360,39 @@ func (c *CRUD) JoinWhere(sql string, where []string, sep string, suffix ...strin
 func (c *CRUD) joinWhere(caller int, sql string, where []string, sep string, suffix ...string) (sql_ string) {
 	sql_ = sql
 	if len(where) > 0 {
-		sql_ += " where " + strings.Join(where, " "+sep+" ") + " " + strings.Join(suffix, " ")
+		sql_ += " where " + strings.Join(where, " "+sep+" ")
+	}
+	if len(suffix) > 0 {
+		sql_ += " " + strings.Join(suffix, " ")
 	}
 	if c.Verbose {
 		c.Log(caller, "CRUD join where done with sql:%v", sql_)
+	}
+	return
+}
+
+func JoinWheref(sql string, args []interface{}, formats string, formatArgs ...interface{}) (sql_ string, args_ []interface{}) {
+	sql_, args_ = Default.joinWheref(1, sql, args, formats, formatArgs...)
+	return
+}
+
+func (c *CRUD) JoinWheref(sql string, args []interface{}, formats string, formatArgs ...interface{}) (sql_ string, args_ []interface{}) {
+	sql_, args_ = c.joinWheref(1, sql, args, formats, formatArgs...)
+	return
+}
+
+func (c *CRUD) joinWheref(caller int, sql string, args []interface{}, formats string, formatArgs ...interface{}) (sql_ string, args_ []interface{}) {
+	sql_, args_ = sql, args
+	if len(formats) > 0 {
+		var where []string
+		sep := "and"
+		formatParts := strings.SplitN(formats, ":", 2)
+		if len(formatParts) > 1 {
+			sep = formatParts[0]
+			formats = formatParts[1]
+		}
+		where, args_ = c.AppendWheref(nil, args_, formats, formatArgs...)
+		sql_ = c.joinWhere(caller+1, sql, where, sep)
 	}
 	return
 }
@@ -401,7 +430,7 @@ func (c *CRUD) JoinPage(sql, orderby string, offset, limit int) (sql_ string) {
 
 func (c *CRUD) joinPage(caller int, sql, orderby string, offset, limit int) (sql_ string) {
 	sql_ = sql
-	if offset >= 0 || limit > 0 {
+	if len(orderby) > 0 && (offset >= 0 || limit > 0) {
 		sql_ += " " + orderby
 	}
 	if offset >= 0 {
@@ -697,46 +726,44 @@ func (c *CRUD) updateFilterRow(caller int, queryer, v interface{}, filter string
 	return
 }
 
-func UpdateSimple(queryer, v interface{}, filter, suffix string, args []interface{}) (affected int64, err error) {
-	affected, err = Default.updateSimple(1, queryer, v, filter, suffix, args)
+func UpdateWheref(queryer, v interface{}, filter, formats string, args ...interface{}) (affected int64, err error) {
+	affected, err = Default.updateWheref(1, queryer, v, filter, formats, args...)
 	return
 }
 
-func (c *CRUD) UpdateSimple(queryer, v interface{}, filter, suffix string, args []interface{}) (affected int64, err error) {
-	affected, err = c.updateSimple(1, queryer, v, filter, suffix, args)
+func (c *CRUD) UpdateWheref(queryer, v interface{}, filter, formats string, args ...interface{}) (affected int64, err error) {
+	affected, err = c.updateWheref(1, queryer, v, filter, formats, args...)
 	return
 }
 
-func (c *CRUD) updateSimple(caller int, queryer, v interface{}, filter, suffix string, args []interface{}) (affected int64, err error) {
-	sql, args := c.updateSQL(caller+1, v, filter, args)
-	if len(suffix) > 0 {
-		sql += " " + suffix
-	}
-	affected, err = c.queryerExec(queryer, sql, args)
+func (c *CRUD) updateWheref(caller int, queryer, v interface{}, filter, formats string, args ...interface{}) (affected int64, err error) {
+	sql, sqlArgs := c.updateSQL(caller+1, v, filter, nil)
+	sql, sqlArgs = c.joinWheref(caller+1, sql, sqlArgs, formats, args...)
+	affected, err = c.queryerExec(queryer, sql, sqlArgs)
 	if err != nil {
 		if c.Verbose {
-			c.Log(caller, "CRUD update simple by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
+			c.Log(caller, "CRUD update wheref by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(sqlArgs), err)
 		}
 		return
 	}
 	if c.Verbose {
-		c.Log(caller, "CRUD update simple by struct:%v,sql:%v,args:%v, result is success affected:%v", reflect.TypeOf(v), sql, jsonString(args), affected)
+		c.Log(caller, "CRUD update wheref by struct:%v,sql:%v,args:%v, result is success affected:%v", reflect.TypeOf(v), sql, jsonString(sqlArgs), affected)
 	}
 	return
 }
 
-func UpdateSimpleRow(queryer, v interface{}, filter, suffix string, args []interface{}) (err error) {
-	err = Default.updateSimpleRow(1, queryer, v, filter, suffix, args)
+func UpdateRowWheref(queryer, v interface{}, filter, formats string, args ...interface{}) (err error) {
+	err = Default.updateRowWheref(1, queryer, v, filter, formats, args...)
 	return
 }
 
-func (c *CRUD) UpdateSimpleRow(queryer, v interface{}, filter, suffix string, args []interface{}) (err error) {
-	err = c.updateSimpleRow(1, queryer, v, filter, suffix, args)
+func (c *CRUD) UpdateRowWheref(queryer, v interface{}, filter, formats string, args ...interface{}) (err error) {
+	err = c.updateRowWheref(1, queryer, v, filter, formats, args)
 	return
 }
 
-func (c *CRUD) updateSimpleRow(caller int, queryer, v interface{}, filter, suffix string, args []interface{}) (err error) {
-	affected, err := c.updateSimple(caller+1, queryer, v, filter, suffix, args)
+func (c *CRUD) updateRowWheref(caller int, queryer, v interface{}, filter, formats string, args ...interface{}) (err error) {
+	affected, err := c.updateWheref(caller+1, queryer, v, filter, formats, args)
 	if err == nil && affected < 1 {
 		err = c.ErrNoRows
 	}
@@ -780,7 +807,10 @@ func (c *CRUD) QuerySQL(v interface{}, filter string, suffix ...string) (sql str
 
 func (c *CRUD) querySQL(caller int, v interface{}, filter string, suffix ...string) (sql string) {
 	table, fields := c.queryField(caller+1, v, filter)
-	sql = fmt.Sprintf(`select %v from %v %v`, strings.Join(fields, ","), table, strings.Join(suffix, " "))
+	sql = fmt.Sprintf(`select %v from %v`, strings.Join(fields, ","), table)
+	if len(suffix) > 0 {
+		sql += " " + strings.Join(suffix, " ")
+	}
 	if c.Verbose {
 		c.Log(caller, "CRUD generate query sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
 	}
@@ -1091,20 +1121,21 @@ func (c *CRUD) queryFilter(caller int, queryer, v interface{}, filter string, wh
 	return
 }
 
-func QuerySimple(queryer, v interface{}, filter string, suffix string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
-	err = Default.querySimple(1, queryer, v, filter, suffix, args, offset, limit, dest...)
+func QueryWheref(queryer, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
+	err = Default.queryWheref(1, queryer, v, filter, formats, args, offset, limit, dest...)
 	return
 }
 
-func (c *CRUD) QuerySimple(queryer, v interface{}, filter string, suffix string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
-	err = c.querySimple(1, queryer, v, filter, suffix, args, offset, limit, dest...)
+func (c *CRUD) QueryWheref(queryer, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
+	err = c.queryWheref(1, queryer, v, filter, formats, args, offset, limit, dest...)
 	return
 }
 
-func (c *CRUD) querySimple(caller int, queryer, v interface{}, filter string, suffix string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
-	sql := c.querySQL(caller+1, v, filter) + " " + suffix
+func (c *CRUD) queryWheref(caller int, queryer, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
+	sql := c.querySQL(caller+1, v, filter)
+	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
 	sql = c.joinPage(caller+1, sql, "", offset, limit)
-	err = c.query(caller+1, queryer, v, filter, sql, args, dest...)
+	err = c.query(caller+1, queryer, v, filter, sql, sqlArgs, dest...)
 	return
 }
 
@@ -1209,19 +1240,20 @@ func (c *CRUD) queryFilterRow(caller int, queryer, v interface{}, filter string,
 	return
 }
 
-func QuerySimpleRow(queryer, v interface{}, filter string, suffix string, args []interface{}, dest ...interface{}) (err error) {
-	err = Default.querySimpleRow(1, queryer, v, filter, suffix, args, dest...)
+func QueryRowWheref(queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.queryRowWheref(1, queryer, v, filter, formats, args, dest...)
 	return
 }
 
-func (c *CRUD) QuerySimpleRow(queryer, v interface{}, filter string, suffix string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.querySimpleRow(1, queryer, v, filter, suffix, args, dest...)
+func (c *CRUD) QueryRowWheref(queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
+	err = c.queryRowWheref(1, queryer, v, filter, formats, args, dest...)
 	return
 }
 
-func (c *CRUD) querySimpleRow(caller int, queryer, v interface{}, filter string, suffix string, args []interface{}, dest ...interface{}) (err error) {
-	sql := c.querySQL(caller+1, v, filter) + " " + suffix
-	err = c.queryRow(caller+1, queryer, v, filter, sql, args, dest...)
+func (c *CRUD) queryRowWheref(caller int, queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
+	sql := c.querySQL(caller+1, v, filter)
+	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
+	err = c.queryRow(caller+1, queryer, v, filter, sql, sqlArgs, dest...)
 	return
 }
 
@@ -1269,7 +1301,10 @@ func (c *CRUD) countSQL(caller int, v interface{}, filter string, suffix ...stri
 	} else {
 		table, fields = c.queryField(caller+1, v, filter)
 	}
-	sql = fmt.Sprintf(`select %v from %v %v`, strings.Join(fields, ","), table, strings.Join(suffix, " "))
+	sql = fmt.Sprintf(`select %v from %v`, strings.Join(fields, ","), table)
+	if len(suffix) > 0 {
+		sql += " " + strings.Join(suffix, " ")
+	}
 	if c.Verbose {
 		c.Log(caller, "CRUD generate count sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
 	}
@@ -1368,19 +1403,20 @@ func (c *CRUD) countFilter(caller int, queryer, v interface{}, filter string, wh
 	return
 }
 
-func CountSimple(queryer, v interface{}, filter, suffix string, args []interface{}, dest ...interface{}) (err error) {
-	err = Default.countSimple(1, queryer, v, filter, suffix, args, dest...)
+func CountWheref(queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.countWheref(1, queryer, v, filter, formats, args, dest...)
 	return
 }
 
-func (c *CRUD) CountSimple(queryer, v interface{}, filter, suffix string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.countSimple(1, queryer, v, filter, suffix, args, dest...)
+func (c *CRUD) CountWheref(queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
+	err = c.countWheref(1, queryer, v, filter, formats, args, dest...)
 	return
 }
 
-func (c *CRUD) countSimple(caller int, queryer, v interface{}, filter, suffix string, args []interface{}, dest ...interface{}) (err error) {
-	sql := c.countSQL(caller+1, v, filter, suffix)
-	err = c.count(caller+1, queryer, v, filter, sql, args, dest...)
+func (c *CRUD) countWheref(caller int, queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
+	sql := c.countSQL(caller+1, v, filter)
+	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
+	err = c.count(caller+1, queryer, v, filter, sql, sqlArgs, dest...)
 	return
 }
 
