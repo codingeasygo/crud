@@ -133,6 +133,24 @@ func FilterFieldCall(on string, v interface{}, filter string, call func(fieldNam
 }
 
 func (c *CRUD) FilterFieldCall(on string, v interface{}, filter string, call func(fieldName, fieldFunc string, field reflect.StructField, value interface{})) (table string) {
+	filters := strings.Split(filter, "|")
+	called := map[string]bool{}
+	recordCall := func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+		if !called[fieldName] {
+			called[fieldName] = true
+			call(fieldName, fieldFunc, field, value)
+		}
+	}
+	table = c.filterFieldOnceCall(on, v, filters[0], recordCall)
+	for _, filter := range filters[1:] {
+		c.filterFieldOnceCall(on, v, filter, recordCall)
+	}
+	return
+}
+
+func (c *CRUD) filterFieldOnceCall(on string, v interface{}, filter string, call func(fieldName, fieldFunc string, field reflect.StructField, value interface{})) (table string) {
+	filter = strings.TrimSpace(filter)
+	filter = strings.TrimPrefix(filter, "*") //* equal empty
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	if v, ok := v.([]interface{}); ok {
@@ -218,13 +236,13 @@ func (c *CRUD) FilterFormatCall(formats string, args []interface{}, call func(fo
 	}
 }
 
-func (c *CRUD) FilterWhere(args []interface{}, v interface{}) (where_ []string, args_ []interface{}) {
+func (c *CRUD) FilterWhere(args []interface{}, v interface{}, filter string) (where_ []string, args_ []interface{}) {
 	args_ = args
-	c.FilterFieldCall("where", v, "", func(fieldName, fieldFunc string, field reflect.StructField, fieldValue interface{}) {
+	c.FilterFieldCall("where", v, filter, func(fieldName, fieldFunc string, field reflect.StructField, fieldValue interface{}) {
 		join := field.Tag.Get("join")
 		if field.Type.Kind() == reflect.Struct && len(join) > 0 {
 			var cmpInner []string
-			cmpInner, args_ = c.FilterWhere(args_, fieldValue)
+			cmpInner, args_ = c.FilterWhere(args_, fieldValue, field.Tag.Get("filter"))
 			where_ = append(where_, "("+strings.Join(cmpInner, " "+join+" ")+")")
 			return
 		}
@@ -340,8 +358,9 @@ func AppendWhereUnify(where []string, args []interface{}, v interface{}) (where_
 func (c *CRUD) AppendWhereUnify(where []string, args []interface{}, v interface{}) (where_ []string, args_ []interface{}) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	modelValue := reflectValue.FieldByName("Where")
+	modelType, _ := reflectValue.Type().FieldByName("Where")
 	where_, args_ = where, args
-	filterWhere, filterArgs := c.FilterWhere(args, modelValue.Addr().Interface())
+	filterWhere, filterArgs := c.FilterWhere(args, modelValue.Addr().Interface(), modelType.Tag.Get("filter"))
 	where_ = append(where_, filterWhere...)
 	args_ = append(args_, filterArgs...)
 	return

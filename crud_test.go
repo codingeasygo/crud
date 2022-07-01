@@ -336,6 +336,31 @@ func TestFilterField(t *testing.T) {
 			t.Error("error")
 			return
 		}
+		table, fields := QueryField(simple, "")
+		if table != "crud_simple" || len(fields) != 5 {
+			t.Errorf("%v", fields)
+			return
+		}
+		table, fields = QueryField(simple, "tid#all|data#all")
+		if table != "crud_simple" || len(fields) != 2 || fields[0] != "tid" || fields[1] != "data::text" {
+			t.Errorf("%v", fields)
+			return
+		}
+		table, fields = QueryField(simple, "tid#all|")
+		if table != "crud_simple" || len(fields) != 6 {
+			t.Errorf("%v", fields)
+			return
+		}
+		table, fields = QueryField(simple, "tid#all|*")
+		if table != "crud_simple" || len(fields) != 6 {
+			t.Errorf("%v", fields)
+			return
+		}
+		table, fields = QueryField(simple, "*|tid#all")
+		if table != "crud_simple" || len(fields) != 6 {
+			t.Errorf("%v", fields)
+			return
+		}
 	}
 	{
 		v := MetaWith("crud_simple", int64(0))
