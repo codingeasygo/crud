@@ -1119,13 +1119,13 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal int64
-		err = CountFilter(NewPoolQueryer(), simple, "count(tid)#all", nil, "", nil, &countVal, "tid")
+		err = CountFilter(NewPoolQueryer(), simple, "count(tid)#all", nil, "", nil, "", &countVal, "tid")
 		if err != nil || countVal < 1 {
 			t.Error(err)
 			return
 		}
 		fmt.Println(countVal)
-		err = Default.CountFilter(NewPoolQueryer(), simple, "count(tid)#all", nil, "", nil, &countVal, "tid")
+		err = Default.CountFilter(NewPoolQueryer(), simple, "count(tid)#all", nil, "", nil, "", &countVal, "tid")
 		if err != nil || countVal < 1 {
 			t.Error(err)
 			return
@@ -1134,13 +1134,13 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal int64
-		err = CountWheref(NewPoolQueryer(), simple, "count(tid)#all", "tid>$1", []interface{}{1}, &countVal, "tid")
+		err = CountWheref(NewPoolQueryer(), simple, "count(tid)#all", "tid>$1", []interface{}{1}, "", &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
 		}
 		fmt.Println(countVal)
-		err = Default.CountWheref(NewPoolQueryer(), simple, "count(tid)#all", "tid>$1", []interface{}{1}, &countVal, "tid")
+		err = Default.CountWheref(NewPoolQueryer(), simple, "count(tid)#all", "tid>$1", []interface{}{1}, "", &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1149,7 +1149,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal *int64
-		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "tid>$1", []interface{}{1}, &countVal, "tid")
+		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "tid>$1", []interface{}{1}, "", &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1185,7 +1185,7 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal int64
-		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "tid>$1", []interface{}{1}, &countVal, "tid")
+		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "tid>$1", []interface{}{1}, "", &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
@@ -1194,12 +1194,21 @@ func TestCount(t *testing.T) {
 	}
 	{
 		var countVal int64
-		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "s.count(tid)#all", "s.tid>$1", []interface{}{1}, &countVal, "tid")
+		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "s.count(tid)#all", "s.tid>$1", []interface{}{1}, "", &countVal, "tid")
 		if err != nil {
 			t.Error(err)
 			return
 		}
 		fmt.Println(countVal)
+	}
+	{
+		var countVals = map[int64]int64{}
+		err = CountWheref(NewPoolQueryer(), MetaWith(simple, int64(0), int64(0)), "s.user_id,count(tid)#all", "s.tid>$1", []interface{}{1}, "group by s.user_id", &countVals, "user_id:tid")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fmt.Println(countVals)
 	}
 }
 
@@ -1719,7 +1728,7 @@ func TestError(t *testing.T) {
 
 		//
 		pool.QueryMode = "no"
-		err = CountWheref(pool, simple, "count(tid)#all", "", nil, &countValue, "tid")
+		err = CountWheref(pool, simple, "count(tid)#all", "", nil, "", &countValue, "tid")
 		if err != Default.ErrNoRows {
 			t.Error(err)
 			return
@@ -1727,7 +1736,7 @@ func TestError(t *testing.T) {
 
 		//
 		pool.QueryErr = fmt.Errorf("error")
-		err = CountWheref(pool, simple, "count(tid)#all", "", nil, &countValue, "tid")
+		err = CountWheref(pool, simple, "count(tid)#all", "", nil, "", &countValue, "tid")
 		if err == nil {
 			t.Error(err)
 			return
@@ -1746,13 +1755,13 @@ func TestError(t *testing.T) {
 		pool := NewPoolQueryer()
 
 		//
-		err = CountWheref(pool, simple, "count(tid)#all", "", nil, &countValue, "title#all")
+		err = CountWheref(pool, simple, "count(tid)#all", "", nil, "", &countValue, "title#all")
 		if err == nil || !strings.Contains(err.Error(), "not supported on dests[0] to set") {
 			t.Error(err)
 			return
 		}
 		//
-		err = CountWheref(pool, []interface{}{int64(0)}, "count(tid)#all", "", nil, &countValue, "none#all")
+		err = CountWheref(pool, []interface{}{int64(0)}, "count(tid)#all", "", nil, "", &countValue, "none#all")
 		if err == nil {
 			t.Error(err)
 			return

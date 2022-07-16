@@ -1405,36 +1405,39 @@ func (c *CRUD) count(caller int, queryer, v interface{}, filter, sql string, arg
 	return
 }
 
-func CountFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
-	err = Default.countFilter(1, queryer, v, filter, where, sep, args, dest...)
+func CountFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, suffix string, dest ...interface{}) (err error) {
+	err = Default.countFilter(1, queryer, v, filter, where, sep, args, suffix, dest...)
 	return
 }
 
-func (c *CRUD) CountFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.countFilter(1, queryer, v, filter, where, sep, args, dest...)
+func (c *CRUD) CountFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, suffix string, dest ...interface{}) (err error) {
+	err = c.countFilter(1, queryer, v, filter, where, sep, args, suffix, dest...)
 	return
 }
 
-func (c *CRUD) countFilter(caller int, queryer, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
+func (c *CRUD) countFilter(caller int, queryer, v interface{}, filter string, where []string, sep string, args []interface{}, suffix string, dest ...interface{}) (err error) {
 	sql := c.countSQL(caller+1, v, filter)
-	sql = c.joinWhere(caller+1, sql, where, sep)
+	sql = c.joinWhere(caller+1, sql, where, sep, suffix)
 	err = c.count(caller+1, queryer, v, filter, sql, args, dest...)
 	return
 }
 
-func CountWheref(queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
-	err = Default.countWheref(1, queryer, v, filter, formats, args, dest...)
+func CountWheref(queryer, v interface{}, filter, formats string, args []interface{}, suffix string, dest ...interface{}) (err error) {
+	err = Default.countWheref(1, queryer, v, filter, formats, args, suffix, dest...)
 	return
 }
 
-func (c *CRUD) CountWheref(queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.countWheref(1, queryer, v, filter, formats, args, dest...)
+func (c *CRUD) CountWheref(queryer, v interface{}, filter, formats string, args []interface{}, suffix string, dest ...interface{}) (err error) {
+	err = c.countWheref(1, queryer, v, filter, formats, args, suffix, dest...)
 	return
 }
 
-func (c *CRUD) countWheref(caller int, queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
+func (c *CRUD) countWheref(caller int, queryer, v interface{}, filter, formats string, args []interface{}, suffix string, dest ...interface{}) (err error) {
 	sql := c.countSQL(caller+1, v, filter)
 	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
+	if len(suffix) > 0 {
+		sql += " " + suffix
+	}
 	err = c.count(caller+1, queryer, v, filter, sql, sqlArgs, dest...)
 	return
 }
