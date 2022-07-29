@@ -1,6 +1,13 @@
 package gen
 
-const SQLTablePG = `
+import (
+	"reflect"
+	"strings"
+
+	"github.com/codingeasygo/util/xsql"
+)
+
+const TableSQLPG = `
 SELECT
     c.relname AS name,
 	c.relkind::text AS type,
@@ -12,7 +19,7 @@ AND c.relkind = 'r'
 ORDER BY c.relname
 `
 
-const SQLColumnPG = `
+const ColumnSQLPG = `
 SELECT
     a.attname AS name,
     format_type(a.atttypid, a.atttypmod) AS type,
@@ -62,22 +69,37 @@ var TypeMapPG = map[string][]string{
 	"smallserial": {"int", "*int"},
 	"serial":      {"int", "*int"},
 	//float
-	"real":             {"float32", "*float32"},
-	"numeric":          {"float64", "*float64"},
-	"double precision": {"float64", "*float64"},
+	"real":             {"decimal.Decimal", "decimal.Decimal"},
+	"numeric":          {"decimal.Decimal", "decimal.Decimal"},
+	"double precision": {"decimal.Decimal", "decimal.Decimal"},
 	//string
 	"character":         {"string", "*string"},
 	"character varying": {"string", "*string"},
 	"text":              {"string", "*string"},
 	//time
-	"time with time zone":         {"time.Time", "*time.Time"},
-	"time without time zone":      {"time.Time", "*time.Time"},
-	"timestamp with time zone":    {"time.Time", "*time.Time"},
-	"timestamp with without zone": {"time.Time", "*time.Time"},
-	"date":                        {"time.Time", "*time.Time"},
+	"time with time zone":         {"xsql.Time", "xsql.Time"},
+	"time without time zone":      {"xsql.Time", "xsql.Time"},
+	"timestamp with time zone":    {"xsql.Time", "xsql.Time"},
+	"timestamp with without zone": {"xsql.Time", "xsql.Time"},
+	"date":                        {"xsql.Time", "xsql.Time"},
 	//bool
 	"boolean": {"bool", "*bool"},
 	//json
-	"json":  {"[]byte", "[]byte"},
-	"jsonb": {"[]byte", "[]byte"},
+	"json":  {"xsql.M", "xsql.M"},
+	"jsonb": {"xsql.M", "xsql.M"},
+}
+
+func NameConvPG(on, name string, field reflect.StructField) string {
+	if on == "query" && strings.HasPrefix(field.Type.String(), "xsql.") && field.Type.String() != "xsql.Time" {
+		return name + "::text"
+	} else {
+		return name
+	}
+}
+
+func ParmConvPG(on, fieldName, fieldFunc string, field reflect.StructField, value interface{}) interface{} {
+	if c, ok := value.(xsql.DbArrayConverter); on == "where" && ok {
+		return c.DbArray()
+	}
+	return value
 }

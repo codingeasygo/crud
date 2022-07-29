@@ -1,5 +1,12 @@
 package crud
 
+import (
+	"context"
+	"fmt"
+)
+
+var ErrNoRows = fmt.Errorf("no rows")
+
 type Scanner interface {
 	Scan(v interface{})
 }
@@ -7,7 +14,7 @@ type Scanner interface {
 type Rows interface {
 	Scan(dest ...interface{}) (err error)
 	Next() bool
-	Close()
+	Close() error
 }
 
 type Row interface {
@@ -15,15 +22,15 @@ type Row interface {
 }
 
 type Queryer interface {
-	Exec(sql string, args ...interface{}) (affected int64, err error)
-	ExecRow(sql string, args ...interface{}) (err error)
-	Query(sql string, args ...interface{}) (rows Rows, err error)
-	QueryRow(sql string, args ...interface{}) (row Row)
+	Exec(ctx context.Context, query string, args ...interface{}) (affected int64, err error)
+	ExecRow(ctx context.Context, query string, args ...interface{}) (err error)
+	Query(ctx context.Context, query string, args ...interface{}) (rows Rows, err error)
+	QueryRow(ctx context.Context, query string, args ...interface{}) (row Row)
 }
 
 type CrudQueryer interface {
-	CrudExec(sql string, args ...interface{}) (affected int64, err error)
-	CrudExecRow(sql string, args ...interface{}) (err error)
-	CrudQuery(sql string, args ...interface{}) (rows Rows, err error)
-	CrudQueryRow(sql string, args ...interface{}) (row Row)
+	CrudExec(ctx context.Context, query string, args ...interface{}) (affected int64, err error)
+	CrudExecRow(ctx context.Context, query string, args ...interface{}) (err error)
+	CrudQuery(ctx context.Context, query string, args ...interface{}) (rows Rows, err error)
+	CrudQueryRow(ctx context.Context, query string, args ...interface{}) (row Row)
 }
