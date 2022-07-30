@@ -139,10 +139,10 @@ func ({{.Arg.Name}} *{{.Struct.Name}}) Meta() (table string, fileds []string) {
 
 //Valid will valid by filter
 func ({{.Arg.Name}} *{{.Struct.Name}}) Valid() (err error) {
-	if {{.Arg.Name}}.{{PrimaryFieldName .Struct}} > 0 {
-		err = attrvalid.Valid({{.Arg.Name}}, {{.Struct.Name}}FilterUpdate, "")
-	} else {
+	if reflect.ValueOf({{.Arg.Name}}.{{PrimaryFieldName .Struct}}).IsZero() {
 		err = attrvalid.Valid({{.Arg.Name}}, {{.Struct.Name}}FilterInsert + "#all", {{.Struct.Name}}FilterOptional)
+	} else {
+		err = attrvalid.Valid({{.Arg.Name}}, {{.Struct.Name}}FilterUpdate, "")
 	}
 	return
 }
