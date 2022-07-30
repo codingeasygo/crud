@@ -139,7 +139,7 @@ func ({{.Arg.Name}} *{{.Struct.Name}}) Meta() (table string, fileds []string) {
 
 //Valid will valid by filter
 func ({{.Arg.Name}} *{{.Struct.Name}}) Valid() (err error) {
-	if {{.Arg.Name}}.TID > 0 {
+	if {{.Arg.Name}}.{{PrimaryFieldName .Struct}} > 0 {
 		err = attrvalid.Valid({{.Arg.Name}}, {{.Struct.Name}}FilterUpdate, "")
 	} else {
 		err = attrvalid.Valid({{.Arg.Name}}, {{.Struct.Name}}FilterInsert + "#all", {{.Struct.Name}}FilterOptional)
@@ -175,7 +175,7 @@ func ({{.Arg.Name}} *{{.Struct.Name}}) UpdateFilterWheref(caller interface{}, ct
 	{{- if .Update.UpdateTime}}
 	{{.Arg.Name}}.UpdateTime = xsql.TimeNow()
 	{{- end}}
-	where, args := crud.AppendWhere(nil, nil, true, "tid=$%v", {{.Arg.Name}}.TID)
+	where, args := crud.AppendWhere(nil, nil, true, "{{PrimaryFieldColumn .Struct}}=$%v", {{.Arg.Name}}.{{PrimaryFieldName .Struct}})
 	if len(formats) > 0 {
 		where, args = crud.AppendWheref(where, args, formats, formatArgs...)
 	}
@@ -241,7 +241,7 @@ func Find{{.Struct.Name}}({{.Arg.Name}}ID int64) ({{.Arg.Name}} *{{.Struct.Name}
 
 //Find{{.Struct.Name}}Call will find {{.Struct.Table.Name}} by id from database
 func Find{{.Struct.Name}}Call(caller interface{}, ctx context.Context, {{.Arg.Name}}ID int64, lock bool) ({{.Arg.Name}} *{{.Struct.Name}}, err error) {
-	where, args := crud.AppendWhere(nil, nil, true, "tid=$%v", {{.Arg.Name}}ID)
+	where, args := crud.AppendWhere(nil, nil, true, "{{PrimaryFieldColumn .Struct}}=$%v", {{.Arg.Name}}ID)
 	{{.Arg.Name}}, err = Find{{.Struct.Name}}WhereCall(caller, ctx, lock, "and", where, args)
 	return
 }
@@ -287,7 +287,7 @@ func List{{.Struct.Name}}ByIDCall(caller interface{}, ctx context.Context, {{.Ar
 		{{.Arg.Name}}Map = map[int64]*{{.Struct.Name}}{}
 		return
 	}
-	err = Scan{{.Struct.Name}}ByIDCall(caller, ctx, {{.Arg.Name}}IDs, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "tid")
+	err = Scan{{.Struct.Name}}ByIDCall(caller, ctx, {{.Arg.Name}}IDs, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryFieldColumn .Struct}}")
 	return
 }
 
@@ -300,7 +300,7 @@ func Scan{{.Struct.Name}}ByID({{.Arg.Name}}IDs []int64, dest ...interface{}) (er
 //Scan{{.Struct.Name}}ByIDCall will list {{.Struct.Table.Name}} by id from database
 func Scan{{.Struct.Name}}ByIDCall(caller interface{}, ctx context.Context, {{.Arg.Name}}IDs []int64, dest ...interface{}) (err error) {
 	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "#all")
-	where := append([]string{}, fmt.Sprintf("tid in (%v)", xsql.Int64Array({{.Arg.Name}}IDs).InArray()))
+	where := append([]string{}, fmt.Sprintf("{{PrimaryFieldColumn .Struct}} in (%v)", xsql.Int64Array({{.Arg.Name}}IDs).InArray()))
 	querySQL = crud.JoinWhere(querySQL, where, " and ")
 	err = crud.Query(caller, ctx, &{{.Struct.Name}}{}, "#all", querySQL, nil, dest...)
 	return
@@ -384,7 +384,7 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	if {{.Arg.Name}}.TID < 1 {
+	if {{.Arg.Name}}.{{PrimaryFieldName .Struct}} < 1 {
 		t.Error("not id")
 		return
 	}
@@ -398,44 +398,44 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	err = Update{{.Struct.Name}}FilterWheref({{.Arg.Name}}, {{.Struct.Name}}FilterUpdate, "tid=$%v", {{.Arg.Name}}.TID)
+	err = Update{{.Struct.Name}}FilterWheref({{.Arg.Name}}, {{.Struct.Name}}FilterUpdate, "{{PrimaryFieldColumn .Struct}}=$%v", {{.Arg.Name}}.{{PrimaryFieldName .Struct}})
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	find{{.Struct.Name}}, err := Find{{.Struct.Name}}({{.Arg.Name}}.TID)
+	find{{.Struct.Name}}, err := Find{{.Struct.Name}}({{.Arg.Name}}.{{PrimaryFieldName .Struct}})
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	if {{.Arg.Name}}.TID != find{{.Struct.Name}}.TID {
+	if {{.Arg.Name}}.{{PrimaryFieldName .Struct}} != find{{.Struct.Name}}.{{PrimaryFieldName .Struct}} {
 		t.Error("find id error")
 		return
 	}
-	find{{.Struct.Name}}, err = Find{{.Struct.Name}}Wheref("tid=$%v", {{.Arg.Name}}.TID)
+	find{{.Struct.Name}}, err = Find{{.Struct.Name}}Wheref("{{PrimaryFieldColumn .Struct}}=$%v", {{.Arg.Name}}.{{PrimaryFieldName .Struct}})
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	if {{.Arg.Name}}.TID != find{{.Struct.Name}}.TID {
+	if {{.Arg.Name}}.{{PrimaryFieldName .Struct}} != find{{.Struct.Name}}.{{PrimaryFieldName .Struct}} {
 		t.Error("find id error")
 		return
 	}
-	find{{.Struct.Name}}, err = Find{{.Struct.Name}}WhereCall(GetQueryer, context.Background(), true, "and", []string{"tid=$1"}, []interface{}{{"{"}}{{.Arg.Name}}.TID{{"}"}})
+	find{{.Struct.Name}}, err = Find{{.Struct.Name}}WhereCall(GetQueryer, context.Background(), true, "and", []string{"{{PrimaryFieldColumn .Struct}}=$1"}, []interface{}{{"{"}}{{.Arg.Name}}.{{PrimaryFieldName .Struct}}{{"}"}})
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	if {{.Arg.Name}}.TID != find{{.Struct.Name}}.TID {
+	if {{.Arg.Name}}.{{PrimaryFieldName .Struct}} != find{{.Struct.Name}}.{{PrimaryFieldName .Struct}} {
 		t.Error("find id error")
 		return
 	}
-	find{{.Struct.Name}}, err = Find{{.Struct.Name}}WherefCall(GetQueryer, context.Background(), true, "tid=$%v", {{.Arg.Name}}.TID)
+	find{{.Struct.Name}}, err = Find{{.Struct.Name}}WherefCall(GetQueryer, context.Background(), true, "{{PrimaryFieldColumn .Struct}}=$%v", {{.Arg.Name}}.{{PrimaryFieldName .Struct}})
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	if {{.Arg.Name}}.TID != find{{.Struct.Name}}.TID {
+	if {{.Arg.Name}}.{{PrimaryFieldName .Struct}} != find{{.Struct.Name}}.{{PrimaryFieldName .Struct}} {
 		t.Error("find id error")
 		return
 	}
@@ -444,40 +444,40 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}ByID({{.Arg.Name}}.TID)
+	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}ByID({{.Arg.Name}}.{{PrimaryFieldName .Struct}})
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	if len({{.Arg.Name}}List) != 1 || {{.Arg.Name}}List[0].TID != {{.Arg.Name}}.TID || len({{.Arg.Name}}Map) != 1 || {{.Arg.Name}}Map[{{.Arg.Name}}.TID] == nil || {{.Arg.Name}}Map[{{.Arg.Name}}.TID].TID != {{.Arg.Name}}.TID {
+	if len({{.Arg.Name}}List) != 1 || {{.Arg.Name}}List[0].{{PrimaryFieldName .Struct}} != {{.Arg.Name}}.{{PrimaryFieldName .Struct}} || len({{.Arg.Name}}Map) != 1 || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryFieldName .Struct}}] == nil || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryFieldName .Struct}}].{{PrimaryFieldName .Struct}} != {{.Arg.Name}}.{{PrimaryFieldName .Struct}} {
 		t.Error("list id error")
 		return
 	}
 	{{.Arg.Name}}List = nil
 	{{.Arg.Name}}Map = nil
-	err = Scan{{.Struct.Name}}ByID([]int64{{"{"}}{{.Arg.Name}}.TID{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "tid")
+	err = Scan{{.Struct.Name}}ByID([]int64{{"{"}}{{.Arg.Name}}.{{PrimaryFieldName .Struct}}{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryFieldColumn .Struct}}")
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	if len({{.Arg.Name}}List) != 1 || {{.Arg.Name}}List[0].TID != {{.Arg.Name}}.TID || len({{.Arg.Name}}Map) != 1 || {{.Arg.Name}}Map[{{.Arg.Name}}.TID] == nil || {{.Arg.Name}}Map[{{.Arg.Name}}.TID].TID != {{.Arg.Name}}.TID {
+	if len({{.Arg.Name}}List) != 1 || {{.Arg.Name}}List[0].{{PrimaryFieldName .Struct}} != {{.Arg.Name}}.{{PrimaryFieldName .Struct}} || len({{.Arg.Name}}Map) != 1 || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryFieldName .Struct}}] == nil || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryFieldName .Struct}}].{{PrimaryFieldName .Struct}} != {{.Arg.Name}}.{{PrimaryFieldName .Struct}} {
 		t.Error("list id error")
 		return
 	}
 	{{.Arg.Name}}List = nil
 	{{.Arg.Name}}Map = nil
-	err = Scan{{.Struct.Name}}Wheref("tid=$%v", []interface{}{{"{"}}{{.Arg.Name}}.TID{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "tid")
+	err = Scan{{.Struct.Name}}Wheref("{{PrimaryFieldColumn .Struct}}=$%v", []interface{}{{"{"}}{{.Arg.Name}}.{{PrimaryFieldName .Struct}}{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryFieldColumn .Struct}}")
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	if len({{.Arg.Name}}List) != 1 || {{.Arg.Name}}List[0].TID != {{.Arg.Name}}.TID || len({{.Arg.Name}}Map) != 1 || {{.Arg.Name}}Map[{{.Arg.Name}}.TID] == nil || {{.Arg.Name}}Map[{{.Arg.Name}}.TID].TID != {{.Arg.Name}}.TID {
+	if len({{.Arg.Name}}List) != 1 || {{.Arg.Name}}List[0].{{PrimaryFieldName .Struct}} != {{.Arg.Name}}.{{PrimaryFieldName .Struct}} || len({{.Arg.Name}}Map) != 1 || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryFieldName .Struct}}] == nil || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryFieldName .Struct}}].{{PrimaryFieldName .Struct}} != {{.Arg.Name}}.{{PrimaryFieldName .Struct}} {
 		t.Error("list id error")
 		return
 	}
 
 	(&{{.Struct.Name}}{}).Valid()
-	(&{{.Struct.Name}}{TID: 10}).Valid()
+	(&{{.Struct.Name}}{{"{"}}{{PrimaryFieldName .Struct}}: 10}).Valid()
 }
 
 `

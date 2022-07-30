@@ -281,11 +281,13 @@ type AutoGen struct {
 
 func (g *AutoGen) FuncMap() (funcs template.FuncMap) {
 	return template.FuncMap{
-		"JoinShowOption":  g.JoinShowOption,
-		"FieldZero":       g.FieldZero,
-		"FieldType":       g.FieldType,
-		"FieldTags":       g.FieldTags,
-		"FieldDefineType": g.FieldDefineType,
+		"JoinShowOption":     g.JoinShowOption,
+		"PrimaryFieldName":   g.PrimaryFieldName,
+		"PrimaryFieldColumn": g.PrimaryFieldColumn,
+		"FieldZero":          g.FieldZero,
+		"FieldType":          g.FieldType,
+		"FieldTags":          g.FieldTags,
+		"FieldDefineType":    g.FieldDefineType,
 	}
 }
 
@@ -298,6 +300,24 @@ func (g *AutoGen) JoinShowOption(options []*Option, key, seq string) string {
 		values = append(values, option.Name)
 	}
 	return strings.Join(values, seq)
+}
+
+func (g *AutoGen) PrimaryFieldName(s *Struct) string {
+	for _, f := range s.Fields {
+		if f.Column.IsPK {
+			return f.Name
+		}
+	}
+	return ""
+}
+
+func (g *AutoGen) PrimaryFieldColumn(s *Struct) string {
+	for _, f := range s.Fields {
+		if f.Column.IsPK {
+			return f.Column.Name
+		}
+	}
+	return ""
 }
 
 func (g *AutoGen) FieldZero(s *Struct, field *Field) (typ string) {
