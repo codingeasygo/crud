@@ -1,208 +1,41 @@
 package crud
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/codingeasygo/util/converter"
+	"github.com/codingeasygo/util/xsql"
+	"github.com/shopspring/decimal"
 )
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	Default.NameConv("", "", reflect.StructField{})
+	Default.ParmConv("", "", "", reflect.StructField{}, nil)
+	Default.getErrNoRows()
+	Default.ErrNoRows = ErrNoRows
 	Default.Verbose = true
-}
-
-type PoolQueryer struct {
-	ExecErr      error
-	ExecAffected int64
-	QueryMode    string
-	QueryErr     error
-	ScanErr      error
-}
-
-func NewPoolQueryer() (pool *PoolQueryer) {
-	pool = &PoolQueryer{
-		ExecAffected: 1,
-	}
-	return
-}
-
-func (t *PoolQueryer) Exec(sql string, args ...interface{}) (affected int64, err error) {
-	affected = t.ExecAffected
-	err = t.ExecErr
-	return
-}
-
-func (t *PoolQueryer) ExecRow(sql string, args ...interface{}) (err error) {
-	err = t.ExecErr
-	return
-}
-
-func (t *PoolQueryer) Query(sql string, args ...interface{}) (rows Rows, err error) {
-	if sql == "no" || t.QueryMode == "no" {
-		rows = &TestRows{
-			Err:   t.ScanErr,
-			Index: -1,
-		}
-		err = t.QueryErr
-		return
-	}
-	if sql == "int64" || t.QueryMode == "int64" {
-		rows = &TestRows{
-			Err:   t.ScanErr,
-			Index: -1,
-			Values: [][]interface{}{
-				{int64(1)},
-				{int64(2)},
-				{int64(3)},
-			},
-		}
-		err = t.QueryErr
-		return
-	}
-	title := "test"
-	rows = &TestRows{
-		Err:   t.ScanErr,
-		Index: -1,
-		Values: [][]interface{}{
-			ScanArgs(&Simple{
-				TID:        1,
-				UserID:     100,
-				Type:       "test",
-				Title:      &title,
-				Image:      &title,
-				CreateTime: time.Now(),
-				UpdateTime: time.Now(),
-				Status:     SimpleStatusNormal,
-			}, "#all"),
-			ScanArgs(&Simple{
-				TID:        2,
-				UserID:     0,
-				Type:       "test",
-				Title:      &title,
-				Image:      &title,
-				CreateTime: time.Now(),
-				UpdateTime: time.Now(),
-				Status:     SimpleStatusNormal,
-			}, "#all"),
-			ScanArgs(&Simple{
-				TID:        2,
-				UserID:     0,
-				Type:       "test",
-				Title:      &title,
-				CreateTime: time.Now(),
-				UpdateTime: time.Now(),
-				Status:     SimpleStatusNormal,
-			}, "#all"),
-		},
-	}
-	err = t.QueryErr
-	return
-}
-
-func (t *PoolQueryer) QueryRow(sql string, args ...interface{}) (row Row) {
-	rows, _ := t.Query(sql, args...)
-	if !rows.Next() {
-		rows.(*TestRows).Err = Default.ErrNoRows
-	}
-	row = rows
-	return
-}
-
-type PoolCrudQueryer struct {
-	Queryer *PoolQueryer
-}
-
-func NewPoolCrudQueryer() (pool *PoolCrudQueryer) {
-	pool = &PoolCrudQueryer{
-		Queryer: NewPoolQueryer(),
-	}
-	return
-}
-
-func (p *PoolCrudQueryer) CrudExec(sql string, args ...interface{}) (affected int64, err error) {
-	affected, err = p.Queryer.Exec(sql, args...)
-	return
-}
-
-func (p *PoolCrudQueryer) CrudExecRow(sql string, args ...interface{}) (err error) {
-	err = p.Queryer.ExecRow(sql, args...)
-	return
-}
-
-func (p *PoolCrudQueryer) CrudQuery(sql string, args ...interface{}) (rows Rows, err error) {
-	rows, err = p.Queryer.Query(sql, args...)
-	return
-}
-
-func (p *PoolCrudQueryer) CrudQueryRow(sql string, args ...interface{}) (row Row) {
-	row = p.Queryer.QueryRow(sql, args...)
-	return
-}
-
-type TestRows struct {
-	Values [][]interface{}
-	Index  int
-	Err    error
-}
-
-func (t *TestRows) Scan(dests ...interface{}) (err error) {
-	if len(dests) < 1 {
-		err = fmt.Errorf("dest is empty")
-		return
-	}
-	err = t.Err
-	if t.Index < len(t.Values) {
-		values := t.Values[t.Index]
-		for i, dest := range dests {
-			destValue := reflect.Indirect(reflect.ValueOf(dest))
-			src := reflect.ValueOf(values[i])
-			if destValue.Type() == src.Type() {
-				destValue.Set(reflect.ValueOf(values[i]))
-			} else {
-				destValue.Set(reflect.Indirect(reflect.ValueOf(values[i])))
-			}
+	Default.NameConv = func(on, name string, field reflect.StructField) string {
+		if on == "query" && strings.HasPrefix(field.Type.String(), "xsql.") && field.Type.String() != "xsql.Time" {
+			return name + "::text"
+		} else {
+			return name
 		}
 	}
-	return
-}
-
-func (t *TestRows) Next() bool {
-	t.Index++
-	return t.Index < len(t.Values)
-}
-
-func (t *TestRows) Close() {
-
-}
-
-const (
-	SimpleTypeMaterial  = "material"
-	SimpleTypeProduct   = "product"
-	SimpleStatusNormal  = 100
-	SimpleStatusRemoved = -1
-)
-
-var (
-	SimpleTypeAll   = []string{SimpleTypeMaterial, SimpleTypeProduct}
-	SimpleStatusAll = []int{SimpleStatusNormal, SimpleStatusRemoved}
-)
-
-type Simple struct {
-	_          string    `table:"crud_simple"`
-	TID        int64     `json:"tid"`
-	UserID     int64     `json:"user_id"`
-	Type       string    `json:"type"`
-	Title      *string   `json:"title"`
-	Image      *string   `json:"image"`
-	Data       string    `json:"data" conv:"::text"`
-	UpdateTime time.Time `json:"update_time"`
-	CreateTime time.Time `json:"create_time"`
-	Status     int       `json:"status"`
-	XX         string    `json:"-"`
+	Default.ParmConv = func(on, fieldName, fieldFunc string, field reflect.StructField, value interface{}) interface{} {
+		if c, ok := value.(xsql.ArrayConverter); on == "where" && ok {
+			return c.DbArray()
+		}
+		return value
+	}
+	go http.ListenAndServe(":6063", nil)
 }
 
 func TestJsonString(t *testing.T) {
@@ -210,34 +43,55 @@ func TestJsonString(t *testing.T) {
 	jsonString(t.Error)
 }
 
-func TestQueryer(t *testing.T) {
+func TestQueryCall(t *testing.T) {
+	clearPG()
+	testQueryCall(t, getPG())
+}
+
+func testQueryCall(t *testing.T, queryer Queryer) {
 	var err error
-	var row Row
+	var rows Rows
 
-	_, err = Default.queryerQuery(NewPoolQueryer(), "test", []interface{}{})
+	rows, err = Default.queryerQuery(queryer, context.Background(), "select 1", []interface{}{})
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	_, err = Default.queryerQuery(NewPoolCrudQueryer(), "test", []interface{}{})
+	rows.Scan(converter.IntPtr(0))
+	rows.Close()
+	rows, err = Default.queryerQuery(&TestCrudQueryer{Queryer: queryer}, context.Background(), "select 1", []interface{}{})
 	if err != nil {
 		t.Error(err)
 		return
 	}
+	rows.Scan(converter.IntPtr(0))
+	rows.Close()
+	rows, err = Default.queryerQuery(func() interface{} { return queryer }, context.Background(), "select 1", []interface{}{})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	rows.Scan(converter.IntPtr(0))
+	rows.Close()
 	func() {
 		defer func() {
 			recover()
 		}()
-		Default.queryerQuery("xxx", "test", []interface{}{})
+		Default.queryerQuery("xxx", context.Background(), "select 1", []interface{}{})
 	}()
 
-	row = Default.queryerQueryRow(NewPoolQueryer(), "test", []interface{}{})
-	if row == nil {
+	err = Default.queryerQueryRow(queryer, context.Background(), "select 1", []interface{}{}).Scan(converter.IntPtr(0))
+	if err != nil {
 		t.Error(err)
 		return
 	}
-	row = Default.queryerQueryRow(NewPoolCrudQueryer(), "test", []interface{}{})
-	if row == nil {
+	err = Default.queryerQueryRow(&TestCrudQueryer{Queryer: queryer}, context.Background(), "select 1", []interface{}{}).Scan(converter.IntPtr(0))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = Default.queryerQueryRow(func() interface{} { return queryer }, context.Background(), "select 1", []interface{}{}).Scan(converter.IntPtr(0))
+	if err != nil {
 		t.Error(err)
 		return
 	}
@@ -245,15 +99,20 @@ func TestQueryer(t *testing.T) {
 		defer func() {
 			recover()
 		}()
-		Default.queryerQueryRow("xxx", "test", []interface{}{})
+		Default.queryerQueryRow("xxx", context.Background(), "select 1", []interface{}{})
 	}()
 
-	_, err = Default.queryerExec(NewPoolQueryer(), "test", []interface{}{})
+	_, _, err = Default.queryerExec(queryer, context.Background(), "select 1", []interface{}{})
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	_, err = Default.queryerExec(NewPoolCrudQueryer(), "test", []interface{}{})
+	_, _, err = Default.queryerExec(&TestCrudQueryer{Queryer: queryer}, context.Background(), "select 1", []interface{}{})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	_, _, err = Default.queryerExec(func() interface{} { return queryer }, context.Background(), "select 1", []interface{}{})
 	if err != nil {
 		t.Error(err)
 		return
@@ -262,14 +121,14 @@ func TestQueryer(t *testing.T) {
 		defer func() {
 			recover()
 		}()
-		Default.queryerExec("xxx", "test", []interface{}{})
+		Default.queryerExec("xxx", context.Background(), "select 1", []interface{}{})
 	}()
 }
 
 func TestNewValue(t *testing.T) {
 	{
-		value := NewValue(&Simple{})
-		if _, ok := value.Interface().(*Simple); !ok {
+		value := NewValue(CrudObject{})
+		if _, ok := value.Interface().(*CrudObject); !ok {
 			t.Error("error")
 			return
 		}
@@ -311,6 +170,18 @@ func TestNewValue(t *testing.T) {
 		})
 	}
 	{
+		var intVal int
+		if v := NewValue(intVal); v.Type() != reflect.TypeOf(&intVal) {
+			t.Error("error")
+			return
+		}
+		var intPtr *int
+		if v := NewValue(intPtr); v.Type() != reflect.TypeOf(&intPtr) {
+			t.Error("error")
+			return
+		}
+	}
+	{
 		src := []interface{}{TableName("xx"), string(""), int64(0)}
 		value := NewValue(src).Interface().([]interface{})
 		if len(value)+1 != len(src) {
@@ -321,81 +192,84 @@ func TestNewValue(t *testing.T) {
 }
 
 func TestFilterField(t *testing.T) {
-	table := ""
-	title := "test"
-	simple := &Simple{
-		UserID: 100,
+	object := &CrudObject{
 		Type:   "test",
-		Title:  &title,
-		Image:  &title,
-		Status: SimpleStatusNormal,
+		Title:  "title",
+		Image:  converter.StringPtr("image"),
+		Data:   xsql.M{"abc": 1},
+		Status: CrudObjectStatusNormal,
 	}
 	{
-		table = Table(simple)
-		if table != "crud_simple" {
+		table := Table(object)
+		if table != "crud_object" {
 			t.Error("error")
 			return
 		}
-		table, fields := QueryField(simple, "")
-		if table != "crud_simple" || len(fields) != 5 {
+		table, fields := QueryField(object, "")
+		if table != "crud_object" || len(fields) != 5 {
+			t.Errorf("%v,%v", table, fields)
+			return
+		}
+		table, fields = QueryField(object, "tid#all|data#all")
+		if table != "crud_object" || len(fields) != 2 || fields[0] != "tid" || fields[1] != "data::text" {
 			t.Errorf("%v", fields)
 			return
 		}
-		table, fields = QueryField(simple, "tid#all|data#all")
-		if table != "crud_simple" || len(fields) != 2 || fields[0] != "tid" || fields[1] != "data::text" {
+		table, fields = QueryField(object, "tid#all|")
+		if table != "crud_object" || len(fields) != 6 {
 			t.Errorf("%v", fields)
 			return
 		}
-		table, fields = QueryField(simple, "tid#all|")
-		if table != "crud_simple" || len(fields) != 6 {
+		table, fields = QueryField(object, "tid#all|*")
+		if table != "crud_object" || len(fields) != 6 {
 			t.Errorf("%v", fields)
 			return
 		}
-		table, fields = QueryField(simple, "tid#all|*")
-		if table != "crud_simple" || len(fields) != 6 {
+		table, fields = QueryField(object, "*|tid#all")
+		if table != "crud_object" || len(fields) != 6 {
 			t.Errorf("%v", fields)
 			return
 		}
-		table, fields = QueryField(simple, "*|tid#all")
-		if table != "crud_simple" || len(fields) != 6 {
+		table, fields = Default.QueryField(object, "*|tid#all")
+		if table != "crud_object" || len(fields) != 6 {
 			t.Errorf("%v", fields)
 			return
 		}
 	}
 	{
-		v := MetaWith("crud_simple", int64(0))
-		table = Table(v)
-		if table != "crud_simple" {
+		v := MetaWith("crud_object", int64(0))
+		table := Table(v)
+		if table != "crud_object" {
 			t.Error("error")
 			return
 		}
 		table, fields := QueryField(v, "tid#all")
-		if table != "crud_simple" || len(fields) != 1 {
+		if table != "crud_object" || len(fields) != 1 {
 			t.Error("error")
 			return
 		}
 	}
 	{
-		v := MetaWith(simple, int64(0))
-		table = Table(v)
-		if table != "crud_simple" {
+		v := MetaWith(object, int64(0))
+		table := Table(v)
+		if table != "crud_object" {
 			t.Error("error")
 			return
 		}
 		table, fields := QueryField(v, "tid#all")
-		if table != "crud_simple" || len(fields) != 1 {
+		if table != "crud_object" || len(fields) != 1 {
 			t.Error("error")
 			return
 		}
 	}
 	{
-		table, fields := QueryField(simple, "t.tid#all")
-		if table != "crud_simple t" || len(fields) != 1 || fields[0] != "t.tid" {
+		table, fields := QueryField(object, "t.tid#all")
+		if table != "crud_object t" || len(fields) != 1 || fields[0] != "t.tid" {
 			t.Error("error")
 			return
 		}
-		table, fields = QueryField(MetaWith(simple, int64(0)), "t.tid#all")
-		if table != "crud_simple t" || len(fields) != 1 || fields[0] != "t.tid" {
+		table, fields = QueryField(MetaWith(object, int64(0)), "t.tid#all")
+		if table != "crud_object t" || len(fields) != 1 || fields[0] != "t.tid" {
 			t.Error("error")
 			return
 		}
@@ -406,15 +280,15 @@ func TestFilterField(t *testing.T) {
 		}
 	}
 	{
-		table = FilterFieldCall("test", simple, "#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+		table := FilterFieldCall("test", object, "#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 		})
-		if table != "crud_simple" {
+		if table != "crud_object" {
 			t.Error("error")
 			return
 		}
 	}
 	{
-		table = FilterFieldCall("test", int64(11), "tid#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+		table := FilterFieldCall("test", int64(11), "tid#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 			if v, ok := value.(int64); !ok || v != 11 {
 				panic("error")
 			}
@@ -434,7 +308,7 @@ func TestFilterField(t *testing.T) {
 		}
 	}
 	{
-		table = FilterFieldCall("test", []interface{}{int64(11)}, "tid#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+		table := FilterFieldCall("test", []interface{}{int64(11)}, "tid#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 			if v, ok := value.(int64); !ok || v != 11 {
 				panic("error")
 			}
@@ -443,7 +317,7 @@ func TestFilterField(t *testing.T) {
 			t.Error("error")
 			return
 		}
-		table = FilterFieldCall("test", []interface{}{TableName("crud_simple"), int64(11), string("abc")}, "tid,title#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+		table = FilterFieldCall("test", []interface{}{TableName("crud_object"), int64(11), string("abc")}, "tid,title#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 			if v, ok := value.(int64); ok && v != 11 {
 				panic("error")
 			}
@@ -451,11 +325,11 @@ func TestFilterField(t *testing.T) {
 				panic("error")
 			}
 		})
-		if table != "crud_simple" {
+		if table != "crud_object" {
 			t.Error("error")
 			return
 		}
-		table = FilterFieldCall("test", []interface{}{TableName("crud_simple"), int64(11), string("abc")}, "count(tid),title#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+		table = FilterFieldCall("test", []interface{}{TableName("crud_object"), int64(11), string("abc")}, "count(tid),title#all", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 			if v, ok := value.(int64); ok && v != 11 {
 				panic("error")
 			}
@@ -463,7 +337,7 @@ func TestFilterField(t *testing.T) {
 				panic("error")
 			}
 		})
-		if table != "crud_simple" {
+		if table != "crud_object" {
 			t.Error("error")
 			return
 		}
@@ -473,7 +347,7 @@ func TestFilterField(t *testing.T) {
 			defer func() {
 				recover()
 			}()
-			FilterFieldCall("test", []interface{}{TableName("crud_simple"), int64(11), string("abc")}, "count(tid)", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
+			FilterFieldCall("test", []interface{}{TableName("crud_object"), int64(11), string("abc")}, "count(tid)", func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
 			})
 		}()
 	}
@@ -559,710 +433,1167 @@ func TestFilterFormatCall(t *testing.T) {
 	}
 }
 
-func TestInsert(t *testing.T) {
-	var err error
-	title := "test"
-	simple := &Simple{
-		UserID: 100,
+func newTestObject() (object *CrudObject) {
+	object = &CrudObject{
 		Type:   "test",
-		Title:  &title,
-		Image:  &title,
-		Status: SimpleStatusNormal,
+		Title:  "title",
+		Image:  converter.StringPtr("image"),
+		Status: CrudObjectStatusNormal,
 	}
-	simple.CreateTime = time.Now()
-	simple.UpdateTime = time.Now()
-	insertSQL, insertArg := InsertSQL(simple, "", "returning tid")
-	fmt.Printf("insert\n")
-	fmt.Printf("   --->%v\n", insertSQL)
-	fmt.Printf("   --->%v\n", insertArg)
-	insertSQL, insertArg = Default.InsertSQL(simple, "", "returning tid")
-	fmt.Printf("insert\n")
-	fmt.Printf("   --->%v\n", insertSQL)
-	fmt.Printf("   --->%v\n", insertArg)
-	insertSQL1, insertArg1 := InsertSQL(simple, "^update_time,create_time,status", "crud_simple", "returning tid")
-	fmt.Printf("insert\n")
-	fmt.Printf("   --->%v\n", insertSQL1)
-	fmt.Printf("   --->%v\n", insertArg1)
-	if strings.Contains(insertSQL1, "update_time") {
-		err = fmt.Errorf("error")
-		t.Errorf("%v,%v", err, insertSQL1)
-		return
-	}
-	table, fileds, param, args := InsertArgs(simple, "")
-	if table != "crud_simple" || len(fileds) < 1 || len(param) < 1 || len(args) < 1 {
-		err = fmt.Errorf("table error")
-		t.Error(err)
-		return
-	}
-	table, fileds, param, args = Default.InsertArgs(simple, "")
-	if table != "crud_simple" || len(fileds) < 1 || len(param) < 1 || len(args) < 1 {
-		err = fmt.Errorf("table error")
-		t.Error(err)
-		return
-	}
-	fileds, param, args = AppendInsert(fileds, param, args, true, "xx=$%v", "1")
-	if len(fileds) < 1 || len(param) < 1 || len(args) < 1 {
-		err = fmt.Errorf("error")
-		t.Error(err)
-		return
-	}
+	object.TimeValue = xsql.TimeNow()
+	object.CreateTime = xsql.TimeNow()
+	object.UpdateTime = xsql.TimeNow()
+	return
+}
 
-	fileds, param, args = AppendInsertf(nil, nil, nil, "x1=$%v,x2=$%v,x3=$%v", "1", "2", "")
-	if len(fileds) != 2 || len(param) != 2 || len(args) != 2 {
-		err = fmt.Errorf("error")
-		t.Error(err)
+func addTestMultiObject(queryer Queryer) (object *CrudObject, objects []*CrudObject, err error) {
+	object = newTestObject()
+	object.UserID = 100
+	object.Type = CrudObjectTypeA
+	object.Level = 1
+	object.Title = "abc"
+	object.IntValue = 1
+	object.Int64Value = 1
+	object.Float64Value = decimal.NewFromFloat(1)
+	object.StringValue = fmt.Sprintf("%v", 1)
+	object.IntPtr = &object.IntValue
+	object.Int64Ptr = &object.Int64Value
+	object.Float64Ptr = object.Float64Value
+	object.StringPtr = &object.StringValue
+	object.Status = CrudObjectStatusNormal
+	_, err = InsertFilter(queryer, context.Background(), object, "^tid#all", "returning", "tid#all")
+	if err != nil {
 		return
 	}
-	fmt.Println("AppendInsertf-->", fileds, param, args)
+	for i := 0; i < 10; i++ {
+		obj := newTestObject()
+		object.UserID = int64(100 + i%3)
+		obj.Type = CrudObjectTypeB
+		obj.Level = 1000 + i
+		obj.Title = fmt.Sprintf("abc-%v", i)
+		obj.IntValue = i % 3
+		obj.Int64Value = int64(i % 3)
+		object.Float64Value = decimal.NewFromInt(int64(i % 3))
+		obj.StringValue = fmt.Sprintf("%v", i%3)
+		obj.Status = CrudObjectStatusNormal
+		_, err = InsertFilter(queryer, context.Background(), obj, "^tid#all", "returning", "tid#all")
+		if err != nil {
+			return
+		}
+		// objects = append(objects, obj)
+	}
+	return
+}
 
-	fileds, param, args = AppendInsertf(nil, nil, nil, "x1=$%v,x2=$%v,x3=$%v#all", "1", "2", "")
-	if len(fileds) != 3 || len(param) != 3 || len(args) != 3 {
-		err = fmt.Errorf("error")
-		t.Error(err)
-		return
-	}
-	fmt.Println("AppendInsertf-->", fileds, param, args)
+func TestInsert(t *testing.T) {
+	clearPG()
+	testInsert(t, getPG())
+}
 
-	_, err = InsertFilter(NewPoolQueryer(), simple, "^tid#all", "returning", "tid#all")
-	if err != nil {
-		t.Error(err)
-		return
+func testInsert(t *testing.T, queryer Queryer) {
+	var err error
+	{
+		object := newTestObject()
+		insertSQL, insertArg := InsertSQL(object, "", "returning tid")
+		fmt.Printf("insert\n")
+		fmt.Printf("   --->%v\n", insertSQL)
+		fmt.Printf("   --->%v\n", insertArg)
+		err = queryer.QueryRow(context.Background(), insertSQL, insertArg...).Scan(&object.TID)
+		if err != nil || object.TID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	_, err = InsertFilter(NewPoolQueryer(), simple, "^tid#all", "", "")
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		object := newTestObject()
+		insertSQL, insertArg := Default.InsertSQL(object, "", "returning tid")
+		fmt.Printf("insert\n")
+		fmt.Printf("   --->%v\n", insertSQL)
+		fmt.Printf("   --->%v\n", insertArg)
+		err = queryer.QueryRow(context.Background(), insertSQL, insertArg...).Scan(&object.TID)
+		if err != nil || object.TID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	_, err = Default.InsertFilter(NewPoolQueryer(), simple, "^tid#all", "", "")
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		object := newTestObject()
+		table, fields, param, args := InsertArgs(object, "")
+		if table != "crud_object" || len(fields) < 1 || len(param) < 1 || len(args) < 1 {
+			t.Error("error")
+			return
+		}
+		fmt.Println("InsertArgs-->", fields, param, args)
+		fields, param, args = AppendInsert(fields, param, args, true, "data=$%v", xsql.M{"abc": 1})
+		if len(fields) < 1 || len(param) < 1 || len(args) < 1 {
+			t.Error("error")
+			return
+		}
+		fmt.Println("AppendInsert-->", fields, param, args)
+		insertSQL := fmt.Sprintf(`insert into %v(%v) values(%v) %v`, table, strings.Join(fields, ","), strings.Join(param, ","), "returning tid")
+		fmt.Println("insertSQL-->", insertSQL)
+		err = queryer.QueryRow(context.Background(), insertSQL, args...).Scan(&object.TID)
+		if err != nil || object.TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		object := newTestObject()
+		table, fields, param, args := Default.InsertArgs(object, "")
+		if table != "crud_object" || len(fields) < 1 || len(param) < 1 || len(args) < 1 {
+			t.Error("err")
+			return
+		}
+		fmt.Println("InsertArgs-->", fields, param, args)
+		fields, param, args = AppendInsertf(fields, param, args, "int_value=$%v,int64_value=$%v,string_value=$%v", 1, 2, "")
+		if len(fields) < 1 || len(param) < 1 || len(args) < 1 {
+			t.Error("err")
+			return
+		}
+		fmt.Println("AppendInsertf-->", fields, param, args)
+		fields, param, args = AppendInsertf(fields, param, args, "int_ptr=$%v,int64_ptr=$%v,string_ptr=$%v#all", nil, converter.Int64Ptr(0), nil)
+		if len(fields) < 1 || len(param) < 1 || len(args) < 1 {
+			t.Error("err")
+			return
+		}
+		fmt.Println("AppendInsertf-->", fields, param, args)
+		insertSQL := fmt.Sprintf(`insert into %v(%v) values(%v) %v`, table, strings.Join(fields, ","), strings.Join(param, ","), "returning tid")
+		fmt.Println("insertSQL-->", insertSQL)
+		err = queryer.QueryRow(context.Background(), insertSQL, args...).Scan(&object.TID)
+		if err != nil || object.TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		object := newTestObject()
+		object.TID = 0
+		_, err = InsertFilter(queryer, context.Background(), object, "^tid#all", "returning", "tid#all")
+		if err != nil || object.TID < 1 {
+			t.Error(err)
+			return
+		}
+		object.TID = 0
+		_, err = InsertFilter(queryer, context.Background(), object, "^tid", "returning", "tid#all")
+		if err != nil || object.TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		object := newTestObject()
+		_, err = InsertFilter(queryer, context.Background(), object, "^tid#all", "", "")
+		if err != nil || object.TID > 0 {
+			t.Error(err)
+			return
+		}
+		_, err = InsertFilter(queryer, context.Background(), object, "^tid", "", "")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_, err = Default.InsertFilter(queryer, context.Background(), object, "^tid#all", "", "")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+	}
+	{ //error
+		object := newTestObject()
+		object.TID = 0
+		_, err = InsertFilter(queryer, context.Background(), object, "^tid#all", "xxxx", "tid#all")
+		if err == nil {
+			t.Error(err)
+			return
+		}
 	}
 }
 
 func TestUpdate(t *testing.T) {
+	clearPG()
+	testUpdate(t, getPG())
+}
+
+func testUpdate(t *testing.T, queryer Queryer) {
 	var err error
-	title := "test"
-	simple := &Simple{
-		UserID: 100,
-		Type:   "test",
-		Title:  &title,
-		Image:  &title,
-		Status: SimpleStatusNormal,
+	object := newTestObject()
+	{
+		object.TID = 0
+		object.Level = 1
+		_, err = InsertFilter(queryer, context.Background(), object, "^tid#all", "returning", "tid#all")
+		if err != nil || object.TID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	simple.UpdateTime = time.Now()
-	var updateSQL string
-	var where []string
-	var args []interface{}
-
-	updateSQL, args = UpdateSQL(simple, "title,image,update_time,status#all", nil)
-
-	if strings.Contains(updateSQL, "tid") {
-		err = fmt.Errorf("error")
-		t.Error(err)
-		return
+	{
+		var updateSQL string
+		var where []string
+		var args []interface{}
+		updateSQL, args = UpdateSQL(object, "title,image,update_time,status#all", nil)
+		if strings.Contains(updateSQL, "tid") {
+			err = fmt.Errorf("error")
+			t.Error(err)
+			return
+		}
+		where, args = AppendWhere(where, args, object.TID > 0, "tid=$%v", object.TID)
+		where, args = AppendWhere(where, args, object.Level > 0, "level=$%v", object.Level)
+		updateSQL = JoinWhere(updateSQL, where, "and", "")
+		fmt.Printf("update\n")
+		fmt.Printf("   --->%v\n", updateSQL)
+		fmt.Printf("   --->%v\n", args)
+		_, err = queryer.ExecRow(context.Background(), updateSQL, args...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
-
-	where, args = AppendWhere(where, args, simple.TID > 0, "tid=$%v", simple.TID)
-	where, args = AppendWhere(where, args, simple.UserID > 0, "user_id=$%v", simple.UserID)
-
-	updateSQL = JoinWhere(updateSQL, where, "and", "limit 1")
-	fmt.Printf("update\n")
-	fmt.Printf("   --->%v\n", updateSQL)
-	fmt.Printf("   --->%v\n", args)
-
-	updateSQL, args = UpdateSQL(simple, "", nil)
-	fmt.Printf("update\n")
-	fmt.Printf("   --->%v\n", updateSQL)
-	fmt.Printf("   --->%v\n", args)
-	updateSQL, args = Default.UpdateSQL(simple, "", nil)
-	fmt.Printf("update\n")
-	fmt.Printf("   --->%v\n", updateSQL)
-	fmt.Printf("   --->%v\n", args)
-
-	table, sets, args := UpdateArgs(simple, "", nil)
-	if table != "crud_simple" || len(sets) < 1 || len(args) < 1 {
-		err = fmt.Errorf("table error")
-		t.Error(err)
-		return
+	{
+		updateSQL, args := UpdateSQL(object, "", nil)
+		fmt.Printf("update\n")
+		fmt.Printf("   --->%v\n", updateSQL)
+		fmt.Printf("   --->%v\n", args)
+		_, err = queryer.ExecRow(context.Background(), updateSQL, args...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		updateSQL, args = Default.UpdateSQL(object, "", nil)
+		fmt.Printf("update\n")
+		fmt.Printf("   --->%v\n", updateSQL)
+		fmt.Printf("   --->%v\n", args)
+		_, err = queryer.ExecRow(context.Background(), updateSQL, args...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
-	table, sets, args = Default.UpdateArgs(simple, "", nil)
-	if table != "crud_simple" || len(sets) < 1 || len(args) < 1 {
-		err = fmt.Errorf("table error")
-		t.Error(err)
-		return
+	{
+		sql, args := UpdateSQL(object, "", nil)
+		if len(args) < 1 {
+			err = fmt.Errorf("table error")
+			t.Error(err)
+			return
+		}
+		where, args := AppendWhere(nil, args, object.TID > 0, "tid=$%v", object.TID)
+		where, args = AppendWhere(where, args, object.Level > 0, "level=$%v", object.Level)
+		fmt.Println("AppendWhere-->", where, args)
+		_, err = Update(queryer, context.Background(), object, sql, where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = UpdateRow(queryer, context.Background(), object, sql, where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Printf("update\n")
-	fmt.Printf("   --->%v\n", table)
-	fmt.Printf("   --->%v\n", sets)
-	fmt.Printf("   --->%v\n", args)
-
-	sets, args = AppendSet(sets, args, true, "xx=$%v", "1")
-	fmt.Printf("update\n")
-	fmt.Printf("   --->%v\n", sets)
-	fmt.Printf("   --->%v\n", args)
-
-	sets, args = AppendSetf(nil, nil, "x1=$%v,x2=$%v,x3=$%v", "1", "2", "")
-	if len(sets) != 2 || len(args) != 2 {
-		t.Error("error")
-		return
+	{
+		sql, args := Default.UpdateSQL(object, "", nil)
+		if len(args) < 1 {
+			err = fmt.Errorf("table error")
+			t.Error(err)
+			return
+		}
+		where, args := AppendWhere(nil, args, object.TID > 0, "tid=$%v", object.TID)
+		where, args = AppendWhere(where, args, object.Level > 0, "level=$%v", object.Level)
+		fmt.Println("AppendWhere-->", where, args)
+		_, err = Default.Update(queryer, context.Background(), object, sql, where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = Default.UpdateRow(queryer, context.Background(), object, sql, where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("AppendSetf-->", sets, args)
-	sets, args = AppendSetf(nil, nil, "x1=$%v,x2=$%v,x3=$%v#all", "1", "2", "")
-	if len(sets) != 3 || len(args) != 3 {
-		t.Error("error")
-		return
+	{
+		var where []string
+		table, sets, args := UpdateArgs(object, "", nil)
+		if table != "crud_object" || len(sets) < 1 || len(args) < 1 {
+			err = fmt.Errorf("table error")
+			t.Error(err)
+			return
+		}
+		fmt.Println("UpdateArgs-->", sets, args)
+		sets, args = AppendSet(sets, args, true, "int_value=$%v", 0)
+		fmt.Println("AppendSet-->", sets, args)
+		sets, args = AppendSetf(sets, args, "int64_value=$%v,string_value=$%v#all", 0, "")
+		fmt.Println("AppendSet-->", sets, args)
+		where, args = AppendWhere(where, args, object.TID > 0, "tid=$%v", object.TID)
+		where, args = AppendWhere(where, args, object.Level > 0, "level=$%v", object.Level)
+		fmt.Println("AppendWhere-->", where, args)
+		_, err = UpdateSet(queryer, context.Background(), object, sets, where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = UpdateSetRow(queryer, context.Background(), object, sets, where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("AppendSetf-->", sets, args)
-
-	_, err = Update(NewPoolQueryer(), simple, sets, where, "and", args)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		var where []string
+		table, sets, args := Default.UpdateArgs(object, "", nil)
+		if table != "crud_object" || len(sets) < 1 || len(args) < 1 {
+			err = fmt.Errorf("table error")
+			t.Error(err)
+			return
+		}
+		where, args = AppendWhere(where, args, object.TID > 0, "tid=$%v", object.TID)
+		where, args = AppendWhere(where, args, object.Level > 0, "level=$%v", object.Level)
+		_, err = Default.UpdateSet(queryer, context.Background(), object, sets, where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = Default.UpdateSetRow(queryer, context.Background(), object, sets, where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
-	_, err = Default.Update(NewPoolQueryer(), simple, sets, where, "and", args)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		object.UpdateTime = xsql.TimeNow()
+		where, args := AppendWhere(nil, nil, object.TID > 0, "tid=$%v", object.TID)
+		_, err = UpdateFilter(queryer, context.Background(), object, "title,image,update_time,status", where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		object.UpdateTime = xsql.TimeNow()
+		_, err = Default.UpdateFilter(queryer, context.Background(), object, "title,image,update_time,status", where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		object.UpdateTime = xsql.TimeNow()
+		err = UpdateFilterRow(queryer, context.Background(), object, "title,image,update_time,status", where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		object.UpdateTime = xsql.TimeNow()
+		err = Default.UpdateFilterRow(queryer, context.Background(), object, "title,image,update_time,status", where, "and", args)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
-	err = UpdateRow(NewPoolQueryer(), simple, sets, where, "and", args)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		_, err = UpdateWheref(queryer, context.Background(), object, "title,image,update_time,status", "tid=$%v", object.TID)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_, err = Default.UpdateWheref(queryer, context.Background(), object, "title,image,update_time,status", "tid=$%v", object.TID)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = UpdateRowWheref(queryer, context.Background(), object, "title,image,update_time,status", "tid=$%v", object.TID)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = Default.UpdateRowWheref(queryer, context.Background(), object, "title,image,update_time,status", "tid=$%v", object.TID)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
-	err = Default.UpdateRow(NewPoolQueryer(), simple, sets, where, "and", args)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	_, err = UpdateFilter(NewPoolQueryer(), simple, "title,image,update_time,status", where, "and", args)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	_, err = Default.UpdateFilter(NewPoolQueryer(), simple, "title,image,update_time,status", where, "and", args)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	err = UpdateFilterRow(NewPoolQueryer(), simple, "title,image,update_time,status", where, "and", args)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	err = Default.UpdateFilterRow(NewPoolQueryer(), simple, "title,image,update_time,status", where, "and", args)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	_, err = UpdateWheref(NewPoolQueryer(), simple, "title,image,update_time,status", "", "")
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	_, err = Default.UpdateWheref(NewPoolQueryer(), simple, "title,image,update_time,status", "", "")
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	err = UpdateRowWheref(NewPoolQueryer(), simple, "title,image,update_time,status", "tid=$%v", 1)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	err = Default.UpdateRowWheref(NewPoolQueryer(), simple, "title,image,update_time,status", "tid=$%v", 1)
-	if err != nil {
-		t.Error(err)
-		return
+	{ //error
+		object := newTestObject()
+		object.TID = 0
+		_, err = Update(queryer, context.Background(), object, "xx", nil, "", nil)
+		if err == nil {
+			t.Error(err)
+			return
+		}
+		err = UpdateRow(queryer, context.Background(), object, "xx", nil, "", nil)
+		if err == nil {
+			t.Error(err)
+			return
+		}
+		_, err = UpdateSet(queryer, context.Background(), object, nil, nil, "", nil)
+		if err == nil {
+			t.Error(err)
+			return
+		}
+		err = UpdateSetRow(queryer, context.Background(), object, nil, nil, "", nil)
+		if err == nil {
+			t.Error(err)
+			return
+		}
+		_, err = UpdateFilter(queryer, context.Background(), object, "xxstatus", nil, "", nil)
+		if err == nil {
+			t.Error(err)
+			return
+		}
+		_, err = UpdateWheref(queryer, context.Background(), object, "status", "xxx=$1", -1)
+		if err == nil {
+			t.Error(err)
+			return
+		}
+		err = UpdateFilterRow(queryer, context.Background(), object, "xxstatus", nil, "", nil)
+		if err == nil {
+			t.Error(err)
+			return
+		}
+		_, sets, args := UpdateArgs(object, "", nil)
+		where, args := AppendWhere(nil, args, true, "tid=$%v", -100)
+		err = UpdateRow(queryer, context.Background(), object, `update crud_object set `+strings.Join(sets, ","), where, "and", args)
+		if err != ErrNoRows {
+			t.Error(err)
+			return
+		}
+		err = UpdateSetRow(queryer, context.Background(), object, sets, where, "and", args)
+		if err != ErrNoRows {
+			t.Error(err)
+			return
+		}
+		err = UpdateRowWheref(queryer, context.Background(), object, "title,image,update_time,status", "tid=$%v", -100)
+		if err != ErrNoRows {
+			t.Error(err)
+			return
+		}
+		err = UpdateFilterRow(queryer, context.Background(), object, "title,image,update_time,status", []string{"tid=$1"}, "and", []interface{}{-100})
+		if err != ErrNoRows {
+			t.Error(err)
+			return
+		}
 	}
 }
 
-func TestQueryField(t *testing.T) {
-	simple := &Simple{}
-	fmt.Println(QueryField(simple, "count(tid)#all"))
-	fmt.Println(QueryField(int64(0), "count(tid)#all"))
+func TestJoinWhere(t *testing.T) {
+	clearPG()
+	testJoinWhere(t, getPG())
 }
 
-func TestSearch(t *testing.T) {
+func testJoinWhere(t *testing.T, queryer Queryer) {
 	var err error
-	var userID int64
-	var key string
-	simple := &Simple{}
-	var where []string
-	var args []interface{}
-	//
-	sql, args := JoinWheref("", nil, "tid>$%v,a=$%v", 1, 2)
-	if !strings.Contains(sql, "tid>$1 and a=$2") || len(args) != 2 {
-		t.Error("error")
-		return
+	object, _, _ := addTestMultiObject(queryer)
+	sql := QuerySQL(object, "#all")
+	{
+		where, args := AppendWheref(nil, nil, "tid=$%v", object.TID)
+		querySQL := JoinWhere(sql, where, "and", "limit 1")
+		fmt.Println("JoinWhere-->", querySQL, args)
+		var result *CrudObject
+		err = QueryRow(queryer, context.Background(), object, "#all", querySQL, args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	sql, args = JoinWheref("", nil, "or:tid>$%v,a=$%v", 1, 2)
-	if !strings.Contains(sql, "tid>$1 or a=$2") || len(args) != 2 {
-		t.Error("error")
-		return
+	{
+		where, args := AppendWheref(nil, nil, "tid=$%v", object.TID)
+		querySQL := Default.JoinWhere(sql, where, "and", "limit 1")
+		fmt.Println("JoinWhere-->", querySQL, args)
+		var result *CrudObject
+		err = QueryRow(queryer, context.Background(), object, "#all", querySQL, args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	sql, args = Default.JoinWheref("", nil, "or:tid>$%v,a=$%v", 1, 2)
-	if !strings.Contains(sql, "tid>$1 or a=$2") || len(args) != 2 {
-		t.Error("error")
-		return
+	{
+		querySQL, args := JoinWheref(sql, nil, "tid=$%v", object.TID)
+		fmt.Println("JoinWhere-->", querySQL, args)
+		var result *CrudObject
+		err = QueryRow(queryer, context.Background(), object, "#all", querySQL, args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	//
-	querySQL := QuerySQL(simple, "#nil,zero", "limit 1")
-	where, args = AppendWhere(where, args, true, "user_id=$%v", userID)
-	where, args = AppendWhere(where, args, true, "(title like $%v or data like $%v)", "%"+key+"%")
-	querySQL = JoinWhere(querySQL, where, "and")
-	querySQL = JoinPage(querySQL, "order by tid", 0, 10)
-	fmt.Printf("query\n")
-	fmt.Printf("   --->%v\n", querySQL)
-	fmt.Printf("   --->%v\n", args)
-
-	querySQL = Default.QuerySQL(simple, "#nil,zero")
-	where, args = Default.AppendWhere(where, args, true, "user_id=$%v", userID)
-	where, args = Default.AppendWhere(where, args, true, "(title like $%v or data like $%v)", "%"+key+"%")
-	querySQL = Default.JoinWhere(querySQL, where, "and")
-	querySQL = Default.JoinPage(querySQL, "order by tid", 0, 10)
-	fmt.Printf("query\n")
-	fmt.Printf("   --->%v\n", querySQL)
-	fmt.Printf("   --->%v\n", args)
-
-	where, args = AppendWheref(nil, nil, "x1=$%v,x2=$%v,x3=$%v", "1", "2", "")
-	if len(where) != 2 || len(args) != 2 {
-		t.Error("error")
-		return
+	{
+		querySQL, args := JoinWheref(sql, nil, "or:tid=$%v", object.TID)
+		fmt.Println("JoinWhere-->", querySQL, args)
+		var result *CrudObject
+		err = QueryRow(queryer, context.Background(), object, "#all", querySQL, args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("AppendWheref-->", where, args)
-	where, args = AppendWheref(nil, nil, "x1=$%v,x2=$%v,x3=$%v#all", "1", "2", "")
-	if len(where) != 3 || len(args) != 3 {
-		t.Error("error")
-		return
+	{
+		querySQL, args := Default.JoinWheref(sql, nil, "or:tid=$%v", object.TID)
+		fmt.Println("JoinWhere-->", querySQL, args)
+		var result *CrudObject
+		err = QueryRow(queryer, context.Background(), object, "#all", querySQL, args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("AppendWheref-->", where, args)
-
-	table, fileds := QueryField(simple, "#all")
-	if table != "crud_simple" {
-		err = fmt.Errorf("table error")
-		t.Error(err)
-		return
-	}
-	fmt.Printf("query\n")
-	fmt.Printf("   --->%v\n", fileds)
-	if len(fileds) < 1 {
-		err = fmt.Errorf("fail")
-		t.Error(err)
-		return
-	}
-	table, fileds = Default.QueryField(simple, "#all")
-	if table != "crud_simple" {
-		err = fmt.Errorf("table error")
-		t.Error(err)
-		return
-	}
-	fmt.Printf("query\n")
-	fmt.Printf("   --->%v\n", fileds)
 }
 
-type UserIDx map[int64]string
+func TestJoinPage(t *testing.T) {
+	clearPG()
+	testJoinPage(t, getPG())
+}
 
-func (u UserIDx) Scan(v interface{}) {
-	s := v.(*Simple)
-	u[s.TID] = fmt.Sprintf("%v-%v", s.Title, s.UserID)
+func testJoinPage(t *testing.T, queryer Queryer) {
+	var err error
+	object, _, _ := addTestMultiObject(queryer)
+	sql := QuerySQL(object, "#all")
+	{
+		querySQL := JoinPage(sql, "order by tid asc", 0, 1)
+		fmt.Println("JoinWhere-->", querySQL)
+		var result *CrudObject
+		err = QueryRow(queryer, context.Background(), object, "#all", querySQL, nil, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		querySQL := Default.JoinPage(sql, "order by tid asc", 0, 1)
+		fmt.Println("JoinWhere-->", querySQL)
+		var result *CrudObject
+		err = QueryRow(queryer, context.Background(), object, "#all", querySQL, nil, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+}
+
+type RowsError struct {
+	Rows
+}
+
+func (r *RowsError) Next() bool {
+	return true
+}
+
+type ObjectInfoMap map[int64]string
+
+func (u ObjectInfoMap) Scan(v interface{}) {
+	s := v.(*CrudObject)
+	u[s.TID] = fmt.Sprintf("%v-%v", s.Title, s.Level)
 }
 
 func TestQuery(t *testing.T) {
+	clearPG()
+	testQuery(t, getPG())
+}
+
+func testQuery(t *testing.T, queryer Queryer) {
 	var err error
-	var simpleList []*Simple
-	var simple *Simple
-	var userIDs0, userIDs1 []int64
-	var images0, images1 []*string
-	var simples0 map[int64]*Simple
-	var simples1 = map[int64][]*Simple{}
-	var userIDm0 map[int64]int64
-	var userIDm1 map[int64][]int64
-	var userIDx = UserIDx{}
-	err = Query(
-		NewPoolQueryer(), &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simpleList, &simple,
-		&userIDs0, "user_id",
-		&userIDs1, "user_id#all",
-		&images0, "image",
-		&images1, "image#all",
-		&simples0, "tid",
-		&simples1, "user_id",
-		&userIDm0, "tid:user_id",
-		&userIDm1, "user_id:tid",
-		&userIDx,
-		func(v *Simple) {
-			// simples1[v.TID] = v
-		},
-	)
-	if err != nil {
-		t.Error(err)
-		return
+	object, _, _ := addTestMultiObject(queryer)
+	{
+		table, fields := QueryField(object, "#all")
+		sql := fmt.Sprintf("select %v from %v", strings.Join(fields, ","), table)
+		where, args := AppendWheref(nil, nil, "tid=$%v", object.TID)
+		sql = JoinWhere(sql, where, "and", "limit 1")
+		fmt.Println("JoinWhere-->", sql, args)
+		var result *CrudObject
+		err = QueryRow(queryer, context.Background(), object, "#all", sql, args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	if len(simpleList) < 1 || simple == nil || len(userIDs0) < 1 || len(userIDs1) < 1 ||
-		len(images0) < 1 || len(images1) < 1 || len(simples0) < 1 || len(simples1) < 1 ||
-		len(userIDm0) < 1 || len(userIDm1) < 1 || len(userIDx) < 1 {
-		fmt.Printf(`
-			len(simpleList)=%v, simple=%v, len(userIDs0)=%v, len(userIDs1)=%v,
-			len(images0)=%v, len(images1)=%v, len(simples0)=%v, len(simples1)=%v,
-			len(userIDm0)=%v, len(userIDm1)=%v, len(userIDx)=%v
-			`,
-			len(simpleList), simple == nil, len(userIDs0), len(userIDs1),
-			len(images0), len(images1), len(simples0), len(simples1),
-			len(userIDm0), len(userIDm1), len(userIDx),
+	{
+		sql := QuerySQL(object, "#all", "where tid=$1")
+		args := []interface{}{object.TID}
+		fmt.Println("JoinWhere-->", sql, args)
+		var result *CrudObject
+		err = QueryRow(queryer, context.Background(), object, "#all", sql, args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		sql := QuerySQL(object, "o.#all", "where tid=$1")
+		args := []interface{}{object.TID}
+		fmt.Println("JoinWhere-->", sql, args)
+		var result *CrudObject
+		err = QueryRow(queryer, context.Background(), object, "o.#all", sql, args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		sql := QuerySQL(object, "#all")
+		where, args := AppendWheref(nil, nil, "tid=$%v", object.TID)
+		sql = JoinWhere(sql, where, "and", "limit 1")
+		fmt.Println("JoinWhere-->", sql, args)
+		var result *CrudObject
+		//
+		result = nil
+		err = QueryRow(queryer, context.Background(), object, "#all", sql, args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
+		result = nil
+		err = QueryFilterRow(queryer, context.Background(), object, "#all", where, "and", args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
+		result = nil
+		err = QueryRowWheref(queryer, context.Background(), object, "#all", "tid=$%v", []interface{}{object.TID}, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
+		result = nil
+		err = Default.QueryRow(queryer, context.Background(), object, "#all", sql, args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
+		result = nil
+		err = Default.QueryFilterRow(queryer, context.Background(), object, "#all", where, "and", args, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
+		result = nil
+		err = Default.QueryRowWheref(queryer, context.Background(), object, "#all", "tid=$%v", []interface{}{object.TID}, &result)
+		if err != nil || result.TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		sql := QuerySQL(object, "#all")
+		where, args := AppendWheref(nil, nil, "tid=$%v", object.TID)
+		sql = JoinWhere(sql, where, "and", "limit 1")
+		fmt.Println("JoinWhere-->", sql, args)
+		var results []*CrudObject
+		err = Query(queryer, context.Background(), object, "#all", sql, args, &results)
+		if err != nil || len(results) != 1 || results[0].TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		sql := QuerySQL(object, "o.#all")
+		where, args := AppendWheref(nil, nil, "o.tid=$%v", object.TID)
+		sql = JoinWhere(sql, where, "and", "limit 1")
+		fmt.Println("JoinWhere-->", sql, args)
+		var results []*CrudObject
+		err = Query(queryer, context.Background(), object, "o.#all", sql, args, &results)
+		if err != nil || len(results) != 1 || results[0].TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		sql := Default.QuerySQL(object, "#all")
+		sql, args := JoinWheref(sql, nil, "tid=$%v", object.TID)
+		fmt.Println("JoinWheref-->", sql, args)
+		var results []*CrudObject
+		err = Query(queryer, context.Background(), object, "#all", sql, args, &results)
+		if err != nil || len(results) != 1 || results[0].TID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		sql := QuerySQL(object, "#all")
+		sql = JoinPage(sql, "order by tid desc", 0, 1)
+		where, args := AppendWheref(nil, nil, "level>$%v#all", 0)
+		fmt.Println("JoinPage-->", sql)
+		var results []*CrudObject
+		//
+		results = nil
+		err = Query(queryer, context.Background(), object, "#all", sql, nil, &results)
+		if err != nil || len(results) != 1 || results[0].TID < 1 {
+			t.Error(err)
+			return
+		}
+		results = nil
+		err = QueryFilter(queryer, context.Background(), object, "#all", where, "and", args, "", 0, 0, &results)
+		if err != nil || len(results) != 11 {
+			t.Error(err)
+			return
+		}
+		results = nil
+		err = QueryWheref(queryer, context.Background(), object, "#all", "level>$%v#all", []interface{}{0}, 0, 0, &results)
+		if err != nil || len(results) != 11 {
+			t.Error(err)
+			return
+		}
+		results = nil
+		err = Default.Query(queryer, context.Background(), object, "#all", sql, nil, &results)
+		if err != nil || len(results) != 1 || results[0].TID < 1 {
+			t.Error(err)
+			return
+		}
+		results = nil
+		err = Default.QueryFilter(queryer, context.Background(), object, "#all", where, "and", args, "", 0, 0, &results)
+		if err != nil || len(results) != 11 {
+			t.Error(err)
+			return
+		}
+		results = nil
+		err = Default.QueryWheref(queryer, context.Background(), object, "#all", "level>$%v#all", []interface{}{0}, 0, 0, &results)
+		if err != nil || len(results) != 11 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		var resultList []*CrudObject
+		var result *CrudObject
+		var int64IDs0, int64IDs1 []int64
+		var images0, images1 []*string
+		var resultMap0 map[int64]*CrudObject
+		var resultMap1 = map[int64][]*CrudObject{}
+		var int64Map0 map[int64]int64
+		var int64Map1 map[int64][]int64
+		var infoMap = ObjectInfoMap{}
+		err = QueryWheref(
+			queryer, context.Background(), object, "#all", "", nil, 0, 0,
+			&resultList, &result,
+			&int64IDs0, "int64_value",
+			&int64IDs1, "int64_value#all",
+			&images0, "image",
+			&images1, "image#all",
+			&resultMap0, "tid",
+			&resultMap1, "int64_value",
+			&int64Map0, "tid:int64_value",
+			&int64Map1, "int64_value:tid",
+			&infoMap,
+			func(v *CrudObject) {
+				// objects1[v.TID] = v
+			},
 		)
-		err = fmt.Errorf("data error")
-		t.Error(err)
-		return
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if len(resultList) < 1 || result == nil || len(int64IDs0) < 1 || len(int64IDs1) < 1 ||
+			len(images0) < 1 || len(images1) < 1 || len(resultMap0) < 1 || len(resultMap1) < 1 ||
+			len(int64Map0) < 1 || len(int64Map1) < 1 || len(infoMap) < 1 {
+			fmt.Printf(`
+				len(resultList)=%v, result=%v, len(int64IDs0)=%v, len(int64IDs1)=%v,
+				len(images0)=%v, len(images1)=%v, len(resultMap0)=%v, len(resultMap1)=%v,
+				len(int64Map0)=%v, len(int64Map1)=%v, len(infoMap)=%v
+			`,
+				len(resultList), result == nil, len(int64IDs0), len(int64IDs1),
+				len(images0), len(images1), len(resultMap0), len(resultMap1),
+				len(int64Map0), len(int64Map1), len(infoMap),
+			)
+			t.Error("data error")
+			return
+		}
 	}
-	data, _ := json.MarshalIndent(map[string]interface{}{
-		"simple":      simple,
-		"list":        simpleList,
-		"user_ids_0":  userIDs0,
-		"user_ids_1":  userIDs1,
-		"images_0":    images0,
-		"images_1":    images1,
-		"simples_0":   simples0,
-		"simples_1":   simples1,
-		"user_id_m_0": userIDm0,
-		"user_id_m_1": userIDm1,
-		"user_id_x":   userIDx,
-	}, "", "\t")
-	fmt.Println("-->\n", string(data))
+	{
+		var idList []int64
+		err = Query(queryer, context.Background(), int64(0), "tid#all", "select tid from crud_object", nil, &idList)
+		if err != nil || len(idList) != 11 {
+			t.Errorf("%v,%v", err, idList)
+			return
+		}
+		var intList []int
+		err = Query(queryer, context.Background(), int(0), "#all", "select int_value from crud_object", nil, &intList)
+		if err != nil || len(intList) != 11 {
+			t.Errorf("%v,%v", err, intList)
+			return
+		}
+		var intPtrList []*int
+		err = Query(queryer, context.Background(), converter.IntPtr(0), "#all", "select int_ptr from crud_object", nil, &intPtrList)
+		if err != nil || len(intPtrList) != 11 {
+			t.Errorf("%v,%v", err, intPtrList)
+			return
+		}
+		var int64List []int64
+		err = Query(queryer, context.Background(), int64(0), "#all", "select int64_value from crud_object", nil, &int64List)
+		if err != nil || len(int64List) != 11 {
+			t.Errorf("%v,%v", err, int64List)
+			return
+		}
+		int64List = nil
+		err = Query(queryer, context.Background(), object, "int64_value#all", "select int64_value from crud_object", nil, &int64List, "int64_value")
+		if err != nil || len(int64List) != 7 {
+			t.Errorf("%v,%v", err, int64List)
+			return
+		}
+		int64List = nil
+		err = Query(queryer, context.Background(), object, "int64_value#all", "select int64_value from crud_object", nil, &int64List, "int64_value#all")
+		if err != nil || len(int64List) != 11 {
+			t.Errorf("%v,%v", err, int64List)
+			return
+		}
+		var int64PtrList []*int64
+		err = Query(queryer, context.Background(), converter.Int64Ptr(0), "#all", "select int64_ptr from crud_object", nil, &int64PtrList)
+		if err != nil || len(int64PtrList) != 11 {
+			t.Errorf("%v,%v", err, int64PtrList)
+			return
+		}
+		int64PtrList = nil
+		err = Query(queryer, context.Background(), object, "int64_ptr#all", "select int64_ptr from crud_object", nil, &int64PtrList, "int64_ptr")
+		if err != nil || len(int64PtrList) != 1 {
+			t.Errorf("%v,%v", err, int64PtrList)
+			return
+		}
+		int64PtrList = nil
+		err = Query(queryer, context.Background(), object, "int64_ptr#all", "select int64_ptr from crud_object", nil, &int64PtrList, "int64_ptr#all")
+		if err != nil || len(int64PtrList) != 11 {
+			t.Errorf("%v,%v", err, int64PtrList)
+			return
+		}
+		var float64List []float64
+		err = Query(queryer, context.Background(), float64(0), "#all", "select float64_value from crud_object", nil, &float64List)
+		if err != nil || len(float64List) != 11 {
+			t.Errorf("%v,%v", err, float64List)
+			return
+		}
+		var float64PtrList []*float64
+		err = Query(queryer, context.Background(), converter.Float64Ptr(0), "#all", "select float64_ptr from crud_object", nil, &float64PtrList)
+		if err != nil || len(float64List) != 11 {
+			t.Errorf("%v,%v", err, float64List)
+			return
+		}
+		var stringList []string
+		err = Query(queryer, context.Background(), string(""), "#all", "select string_value from crud_object", nil, &stringList)
+		if err != nil || len(stringList) != 11 {
+			t.Errorf("%v,%v", err, stringList)
+			return
+		}
+		var stringPtrList []*string
+		err = Query(queryer, context.Background(), converter.StringPtr(""), "#all", "select string_ptr from crud_object", nil, &stringPtrList)
+		if err != nil || len(stringPtrList) != 11 {
+			t.Errorf("%v,%v", err, stringPtrList)
+			return
+		}
+	}
+	{
+		var idResult int64
+		err = QueryRow(queryer, context.Background(), int64(0), "#all", "select tid from crud_object where tid=$1", []interface{}{object.TID}, &idResult)
+		if err != nil || idResult < 1 {
+			t.Errorf("%v,%v", err, idResult)
+			return
+		}
+		var intResult int
+		err = QueryRow(queryer, context.Background(), int(0), "#all", "select int_value from crud_object where tid=$1", []interface{}{object.TID}, &intResult)
+		if err != nil || intResult < 1 {
+			t.Errorf("%v,%v", err, intResult)
+			return
+		}
+		var intPtrResult *int
+		err = QueryRow(queryer, context.Background(), converter.IntPtr(0), "#all", "select int_ptr from crud_object where tid=$1", []interface{}{object.TID}, &intPtrResult)
+		if err != nil || intPtrResult == nil {
+			t.Errorf("%v,%v", err, intPtrResult)
+			return
+		}
+		var int64Result int64
+		err = QueryRow(queryer, context.Background(), int64(0), "#all", "select int64_value from crud_object where tid=$1", []interface{}{object.TID}, &int64Result)
+		if err != nil || int64Result < 1 {
+			t.Errorf("%v,%v", err, int64Result)
+			return
+		}
+		var int64PtrResult *int64
+		err = QueryRow(queryer, context.Background(), converter.Int64Ptr(0), "#all", "select int64_ptr from crud_object where tid=$1", []interface{}{object.TID}, &int64PtrResult)
+		if err != nil || int64PtrResult == nil {
+			t.Errorf("%v,%v", err, int64PtrResult)
+			return
+		}
+		var float64Result float64
+		err = QueryRow(queryer, context.Background(), float64(0), "#all", "select float64_value from crud_object where tid=$1", []interface{}{object.TID}, &float64Result)
+		if err != nil || float64Result < 1 {
+			t.Errorf("%v,%v", err, float64Result)
+			return
+		}
+		var float64PtrResult *float64
+		err = QueryRow(queryer, context.Background(), converter.Float64Ptr(0), "#all", "select float64_ptr from crud_object where tid=$1", []interface{}{object.TID}, &float64PtrResult)
+		if err != nil || float64Result < 1 {
+			t.Errorf("%v,%v", err, float64Result)
+			return
+		}
+		var stringResult string
+		err = QueryRow(queryer, context.Background(), string(""), "#all", "select string_value from crud_object where tid=$1", []interface{}{object.TID}, &stringResult)
+		if err != nil || len(stringResult) < 1 {
+			t.Errorf("%v,%v", err, stringResult)
+			return
+		}
+		var stringPtrResult *string
+		err = QueryRow(queryer, context.Background(), converter.StringPtr(""), "#all", "select string_ptr from crud_object where tid=$1", []interface{}{object.TID}, &stringPtrResult)
+		if err != nil || stringPtrResult == nil {
+			t.Errorf("%v,%v", err, stringPtrResult)
+			return
+		}
+	}
+	{ //alias
+		var idList []int64
+		err = Query(queryer, context.Background(), MetaWith(object, int64(0)), "o.tid#all", "select o.tid from crud_object o", nil, &idList, "tid")
+		if err != nil || len(idList) != 11 {
+			t.Errorf("%v,%v", err, idList)
+			return
+		}
+	}
+	{
+		querySQL := QuerySQL(object, "#all")
+		rows, err := queryer.Query(context.Background(), querySQL)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		for rows.Next() {
+			obj := &CrudObject{}
+			args := ScanArgs(obj, "#all")
+			err = rows.Scan(args...)
+			if err != nil || obj.TID < 1 {
+				t.Error(err)
+				return
+			}
+		}
+		rows.Close()
+	}
+	{
+		querySQL := QuerySQL(object, "#all")
+		rows, err := queryer.Query(context.Background(), querySQL)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		for rows.Next() {
+			var obj *CrudObject
+			err = Scan(rows, &CrudObject{}, "#all", &obj)
+			if err != nil || obj == nil {
+				t.Error(err)
+				return
+			}
+		}
+		rows.Close()
+		var obj *CrudObject
+		err = Scan(&RowsError{Rows: rows}, &CrudObject{}, "#all", &obj)
+		if err == nil {
+			t.Error(err)
+			return
+		}
+	}
+	{ //error
+		var result *CrudObject
+		var results []*CrudObject
 
-	simple = nil
-	err = QueryRow(
-		NewPoolQueryer(), &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		&simple,
-	)
-	if err != nil || simple == nil {
-		t.Error(err)
-		return
-	}
+		sql := QuerySQL(object, "#all", "xxx xxx")
+		err = Query(queryer, context.Background(), object, "#all", sql, nil, &results)
+		if err == nil {
+			t.Error(err)
+			return
+		}
 
-	simple = &Simple{}
-	err = QueryRow(
-		NewPoolQueryer(), &Simple{}, "#all",
-		"sql", []interface{}{"arg"},
-		simple,
-	)
-	if err != nil || simple == nil || simple.TID < 1 {
-		t.Error(err)
-		return
-	}
+		where, args := AppendWheref(nil, nil, "lexxvel>$%v#all", 0)
+		err = QueryFilter(queryer, context.Background(), object, "#all", where, "and", args, "", 0, 0, &results)
+		if err == nil {
+			t.Error(err)
+			return
+		}
 
-	//
-	//test int64
-	var testIDs0 []int64
-	var testIDs1 int64
-	testIDs0 = nil
-	err = Query(
-		&PoolQueryer{}, int64(0), "",
-		"int64", []interface{}{"arg"},
-		&testIDs0,
-	)
-	if err != nil || len(testIDs0) != 3 {
-		err = fmt.Errorf("error")
-		t.Error(err)
-		return
-	}
-	testIDs0 = nil
-	err = Default.Query(
-		&PoolQueryer{}, int64(0), "",
-		"int64", []interface{}{"arg"},
-		&testIDs0,
-	)
-	if err != nil || len(testIDs0) != 3 {
-		err = fmt.Errorf("error")
-		t.Error(err)
-		return
-	}
-	err = QueryRow(
-		&PoolQueryer{}, int64(0), "",
-		"int64", []interface{}{"arg"},
-		&testIDs1,
-	)
-	if err != nil || testIDs1 < 1 {
-		err = fmt.Errorf("error")
-		t.Error(err)
-		return
-	}
-	err = Default.QueryRow(
-		&PoolQueryer{}, int64(0), "",
-		"int64", []interface{}{"arg"},
-		&testIDs1,
-	)
-	if err != nil || testIDs1 < 1 {
-		err = fmt.Errorf("error")
-		t.Error(err)
-		return
-	}
+		err = QueryWheref(queryer, context.Background(), object, "#all", "levxxel>$%v#all", []interface{}{0}, 0, 0, &results)
+		if err == nil {
+			t.Error(err)
+			return
+		}
 
-	//
-	//
-	simpleList = []*Simple{}
-	err = QueryFilter(NewPoolQueryer(), &Simple{}, "#all", nil, "", nil, "", 0, 10, &simpleList)
-	if err != nil {
-		return
+		err = QueryFilterRow(queryer, context.Background(), object, "#all", where, "and", args, &result)
+		if err == nil {
+			t.Error(err)
+			return
+		}
 	}
-	if len(simpleList) < 1 {
-		err = fmt.Errorf("data error")
-		t.Error(err)
-		return
+	{ //error
+		var idList []int
+		var idResult int
+		err = Query(queryer, context.Background(), int64(0), "o.tid#all", "select o.tid from crud_object o", nil, &idList)
+		if err == nil {
+			t.Errorf("%v,%v", err, idList)
+			return
+		}
+		err = Query(queryer, context.Background(), int64(0), "o.tid#all", "select o.tid from crud_object o", nil, &idList, "tid") //not struct error
+		if err == nil {
+			t.Errorf("%v,%v", err, idList)
+			return
+		}
+		err = Query(queryer, context.Background(), int64(0), "o.tid#all", "select o.tid from crud_object o", nil, &idList, &idList)
+		if err == nil {
+			t.Errorf("%v,%v", err, idList)
+			return
+		}
+		err = Query(queryer, context.Background(), int64(0), "o.tid#all", "select o.tid from crud_object o", nil, &idList, "")
+		if err == nil {
+			t.Errorf("%v,%v", err, idList)
+			return
+		}
+		err = Query(queryer, context.Background(), MetaWith(object, int64(0)), "o.tid#all", "select o.tid from crud_object o", nil, &idList, "xxx") //not field
+		if err == nil {
+			t.Errorf("%v,%v", err, idList)
+			return
+		}
+		err = Query(queryer, context.Background(), object, "o.tid#all", "select o.tid from crud_object o", nil, &idList, "tid") //type not supported
+		if err == nil {
+			t.Errorf("%v,%v", err, idList)
+			return
+		}
+		err = QueryRow(queryer, context.Background(), int64(0), "#all", "select tid from crud_object where tid=$1", []interface{}{object.TID}, &idResult)
+		if err == nil {
+			t.Errorf("%v,%v", err, idResult)
+			return
+		}
 	}
-	simpleList = []*Simple{}
-	err = Default.QueryFilter(NewPoolQueryer(), &Simple{}, "#all", nil, "", nil, "", 0, 10, &simpleList)
-	if err != nil {
-		return
-	}
-	if len(simpleList) < 1 {
-		err = fmt.Errorf("data error")
-		t.Error(err)
-		return
-	}
-	err = QueryFilterRow(NewPoolQueryer(), &Simple{}, "#all", nil, "", []interface{}{"arg"}, &simple)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	err = Default.QueryFilterRow(NewPoolQueryer(), &Simple{}, "#all", nil, "", []interface{}{"arg"}, &simple)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	//
-	simpleList = []*Simple{}
-	err = QueryWheref(NewPoolQueryer(), &Simple{}, "#all", "tid>=$%v", []interface{}{1}, 0, 10, &simpleList)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	if len(simpleList) < 1 {
-		err = fmt.Errorf("data error")
-		t.Error(err)
-		return
-	}
-	simpleList = []*Simple{}
-	err = Default.QueryWheref(NewPoolQueryer(), &Simple{}, "#all", "tid>=$%v", []interface{}{1}, 0, 10, &simpleList)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	if len(simpleList) < 1 {
-		err = fmt.Errorf("data error")
-		t.Error(err)
-		return
-	}
-	err = QueryRowWheref(NewPoolQueryer(), &Simple{}, "#all", "tid>=$%v", []interface{}{1}, &simple)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	err = Default.QueryRowWheref(NewPoolQueryer(), &Simple{}, "#all", "tid>=$%v", []interface{}{1}, &simple)
-	if err != nil {
-		t.Error(err)
-		return
+	{ //error
+		var idMap map[int64]int
+		err = Query(queryer, context.Background(), object, "tid,int_value#all", "select tid,int_value from crud_object", nil, &idMap)
+		if err == nil {
+			t.Errorf("%v,%v", err, idMap)
+			return
+		}
+		err = Query(queryer, context.Background(), object, "tid,int_value#all", "select tid,int_value from crud_object", nil, &idMap, &idMap)
+		if err == nil {
+			t.Errorf("%v,%v", err, idMap)
+			return
+		}
+		err = Query(queryer, context.Background(), object, "tid,int_value#all", "select tid,int_value from crud_object", nil, &idMap, "")
+		if err == nil {
+			t.Errorf("%v,%v", err, idMap)
+			return
+		}
+		err = Query(queryer, context.Background(), object, "tid,int_value#all", "select tid,int_value from crud_object", nil, &idMap, "xxx")
+		if err == nil {
+			t.Errorf("%v,%v", err, idMap)
+			return
+		}
+		err = Query(queryer, context.Background(), object, "tid,int_value#all", "select tid,int_value from crud_object", nil, &idMap, "tid:xxx")
+		if err == nil {
+			t.Errorf("%v,%v", err, idMap)
+			return
+		}
 	}
 }
 
 func TestCount(t *testing.T) {
-	var err error
-	simple := &Simple{}
-	{
-		if countSQL := CountSQL(simple, ""); !strings.Contains(countSQL, "count(*)") {
-			t.Errorf("err:%v", countSQL)
-			return
-		}
-		if countSQL := CountSQL(simple, "*"); !strings.Contains(countSQL, "count(*)") {
-			t.Errorf("err:%v", countSQL)
-			return
-		}
-		if countSQL := CountSQL(simple, "count(*)"); !strings.Contains(countSQL, "count(*)") {
-			t.Errorf("err:%v", countSQL)
-			return
-		}
-		if countSQL := CountSQL(simple, "count(*)#all"); !strings.Contains(countSQL, "count(*)") {
-			t.Errorf("err:%v", countSQL)
-			return
-		}
-		if countSQL := CountSQL(simple, "count(tid)#all"); !strings.Contains(countSQL, "count(tid)") {
-			t.Errorf("err:%v", countSQL)
-			return
-		}
-		if countSQL := Default.CountSQL(simple, "count(tid)#all"); !strings.Contains(countSQL, "count(tid)") {
-			t.Errorf("err:%v", countSQL)
-			return
-		}
-		if countSQL := Default.CountSQL(simple, "count(tid)#all", "limit 1"); !strings.Contains(countSQL, "count(tid)") {
-			t.Errorf("err:%v", countSQL)
-			return
-		}
-	}
-	{
-		var countVal int64
-		err = Count(NewPoolQueryer(), simple, "tid#all", "select count(*) from crud_simple", nil, &countVal, "tid")
-		if err != nil || countVal < 1 {
-			t.Error(err)
-			return
-		}
-		fmt.Println(countVal)
-		err = Default.Count(NewPoolQueryer(), simple, "tid#all", "select count(*) from crud_simple", nil, &countVal, "tid")
-		if err != nil || countVal < 1 {
-			t.Error(err)
-			return
-		}
-		fmt.Println(countVal)
-	}
-	{
-		var countVal int64
-		err = CountFilter(NewPoolQueryer(), simple, "count(tid)#all", nil, "", nil, "", &countVal, "tid")
-		if err != nil || countVal < 1 {
-			t.Error(err)
-			return
-		}
-		fmt.Println(countVal)
-		err = Default.CountFilter(NewPoolQueryer(), simple, "count(tid)#all", nil, "", nil, "", &countVal, "tid")
-		if err != nil || countVal < 1 {
-			t.Error(err)
-			return
-		}
-		fmt.Println(countVal)
-	}
-	{
-		var countVal int64
-		err = CountWheref(NewPoolQueryer(), simple, "count(tid)#all", "tid>$1", []interface{}{1}, "", &countVal, "tid")
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		fmt.Println(countVal)
-		err = Default.CountWheref(NewPoolQueryer(), simple, "count(tid)#all", "tid>$1", []interface{}{1}, "", &countVal, "tid")
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		fmt.Println(countVal)
-	}
-	{
-		var countVal *int64
-		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "tid>$1", []interface{}{1}, "", &countVal, "tid")
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		fmt.Println(*countVal)
-	}
-	{
-		var typeVal *string
-		err = QueryRowWheref(NewPoolQueryer(), MetaWith(simple, int64(0), int64(0), typeVal), "tid,user_id,type#all", "tid>$1", []interface{}{1}, &typeVal, "type")
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		fmt.Println(*typeVal)
-	}
-	{
-		var countVal int64
-		err = QueryRowWheref(NewPoolQueryer(), MetaWith(simple, countVal), "tid#all", "tid>$1", []interface{}{1}, &countVal, "tid")
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		fmt.Println(countVal)
-	}
-	{
-		var typeVal string
-		err = QueryRowWheref(NewPoolQueryer(), MetaWith(simple, int64(0), int64(0), typeVal), "tid,user_id,type#all", "tid>$1", []interface{}{1}, &typeVal, "type")
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		fmt.Println(typeVal)
-	}
-	{
-		var countVal int64
-		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "count(tid)#all", "tid>$1", []interface{}{1}, "", &countVal, "tid")
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		fmt.Println(countVal)
-	}
-	{
-		var countVal int64
-		err = CountWheref(NewPoolQueryer(), MetaWith(simple, countVal), "s.count(tid)#all", "s.tid>$1", []interface{}{1}, "", &countVal, "tid")
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		fmt.Println(countVal)
-	}
-	{
-		var countVals = map[int64]int64{}
-		err = CountWheref(NewPoolQueryer(), MetaWith(simple, int64(0), int64(0)), "s.user_id,count(tid)#all", "s.tid>$1", []interface{}{1}, "group by s.user_id", &countVals, "user_id:tid")
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		fmt.Println(countVals)
-	}
+	clearPG()
+	testCount(t, getPG())
 }
 
-func TestScan(t *testing.T) {
+func testCount(t *testing.T, queryer Queryer) {
 	var err error
+	object, _, _ := addTestMultiObject(queryer)
 	{
-		rows, _ := (NewPoolQueryer()).Query("")
-		err = Scan(
-			rows, &Simple{}, "#all",
-			func(v *Simple) {
-				// simples1[v.TID] = v
-			},
-		)
-		if err != nil {
+		var countValue int64
+		var countSQL string
+
+		countSQL = CountSQL(object, "")
+		err = Count(queryer, context.Background(), int64(0), "#all", countSQL, nil, &countValue)
+		if err != nil || countValue != 11 {
+			t.Error(err)
+			return
+		}
+		countSQL = CountSQL(object, "*")
+		err = Count(queryer, context.Background(), int64(0), "#all", countSQL, nil, &countValue)
+		if err != nil || countValue != 11 {
+			t.Error(err)
+			return
+		}
+		countSQL = CountSQL(object, "count(*)")
+		err = Count(queryer, context.Background(), int64(0), "#all", countSQL, nil, &countValue)
+		if err != nil || countValue != 11 {
+			t.Error(err)
+			return
+		}
+		countSQL = CountSQL(object, "count(*)#all")
+		err = Count(queryer, context.Background(), int64(0), "#all", countSQL, nil, &countValue)
+		if err != nil || countValue != 11 {
+			t.Error(err)
+			return
+		}
+		countSQL = CountSQL(object, "count(tid)")
+		err = Count(queryer, context.Background(), int64(0), "#all", countSQL, nil, &countValue)
+		if err != nil || countValue != 11 {
+			t.Error(err)
+			return
+		}
+		countSQL = CountSQL(object, "count(tid)#all")
+		err = Count(queryer, context.Background(), int64(0), "#all", countSQL, nil, &countValue)
+		if err != nil || countValue != 11 {
+			t.Error(err)
+			return
+		}
+
+		countSQL = Default.CountSQL(object, "count(tid)#all", "where tid>$1")
+		err = Default.Count(queryer, context.Background(), int64(0), "#all", countSQL, []interface{}{0}, &countValue)
+		if err != nil || countValue != 11 {
 			t.Error(err)
 			return
 		}
 	}
 	{
-		row := (NewPoolQueryer()).QueryRow("")
-		err = ScanRow(
-			row, &Simple{}, "#all",
-			func(v *Simple) {
-				// simples1[v.TID] = v
-			},
-		)
-		if err != nil {
+		var countVal int64
+		err = CountWheref(queryer, context.Background(), object, "count(tid)#all", "int_value>$1#all", []interface{}{0}, "", &countVal, "tid")
+		if err != nil || countVal != 7 {
+			t.Errorf("%v,%v", err, countVal)
+			return
+		}
+		err = CountWheref(queryer, context.Background(), MetaWith(object, int64(0)), "count(tid)#all", "int_value>$1#all", []interface{}{0}, "", &countVal, "tid")
+		if err != nil || countVal != 7 {
+			t.Errorf("%v,%v", err, countVal)
+			return
+		}
+
+		err = Default.CountWheref(queryer, context.Background(), object, "count(tid)#all", "int_value>$1#all", []interface{}{0}, " ", &countVal, "tid")
+		if err != nil || countVal != 7 {
+			t.Errorf("%v,%v", err, countVal)
+			return
+		}
+	}
+	{
+		var countVal int64
+		err = CountFilter(queryer, context.Background(), object, "count(tid)#all", nil, "", nil, "", &countVal, "tid")
+		if err != nil || countVal != 11 {
+			t.Error(err)
+			return
+		}
+		err = Default.CountFilter(queryer, context.Background(), object, "count(tid)#all", nil, "", nil, "", &countVal, "tid")
+		if err != nil || countVal != 11 {
+			t.Error(err)
+			return
+		}
+	}
+	{ //error
+		var countVal int64
+		err = CountFilter(queryer, context.Background(), object, "abc(tid)#all", nil, "", nil, "", &countVal, "tid")
+		if err == nil {
 			t.Error(err)
 			return
 		}
 	}
 }
 
-type ListSimpleUnify struct {
-	Model Simple `json:"model"`
+type SearchCrudObjectUnify struct {
+	Model CrudObject `json:"model"`
 	Where struct {
-		UserID int64 `json:"user_id"`
-		Type   int   `json:"type" filter:"#all"`
+		UserID int64          `json:"user_id"`
+		Type   CrudObjectType `json:"type" filter:"#all"`
 		Key    struct {
 			Title string `json:"title" cmp:"title like $%v"`
-			Data  string `json:"data" cmp:"data like $%v"`
+			Data  string `json:"data" cmp:"data::text like $%v"`
 		} `json:"key" join:"or"`
-		Status []int `cmp:"status=any($%v)"`
-		Empty  int
+		Status CrudObjectStatusArray `json:"status" cmp:"status=any($%v)"`
 	} `json:"where" join:"and"`
 	Page struct {
-		Order  string `json:"order"`
+		Order  string `json:"order" default:"order by tid desc"`
 		Offset int    `json:"offset"`
 		Limit  int    `json:"limit"`
 	} `json:"page"`
 	Query struct {
-		Enabled bool      `json:"enabled" scan:"-"`
-		Simples []*Simple `json:"simples"`
-		UserIDs []int64   `json:"user_ids" scan:"user_id#all"`
+		Enabled bool          `json:"enabled" scan:"-"`
+		Objects []*CrudObject `json:"objects"`
+		UserIDs []int64       `json:"user_ids" scan:"user_id#all"`
 	} `json:"query" filter:"#all"`
 	Count struct {
 		Enabled bool  `json:"enabled" scan:"-"`
@@ -1271,500 +1602,352 @@ type ListSimpleUnify struct {
 	} `json:"count" filter:"count(tid),max(user_id)#all"`
 }
 
-type FindSimpleUnify struct {
-	Model Simple `json:"model"`
+type FindCrudObjectUnify struct {
+	Model CrudObject `json:"model"`
 	Where struct {
-		UserID int64  `json:"user_id" cmp:"user_id >"`
-		Type   int    `json:"type" filter:"#all"`
-		Key    string `json:"key" cmp:"title like $%v or data like $%v"`
-		Status []int  `json:"status" cmp:"any($%v)"`
-		Empty  int    `json:"empty"`
+		UserID int64                 `json:"user_id" cmp:"user_id="`
+		Type   CrudObjectType        `json:"type" filter:"#all"`
+		Key    string                `json:"key" cmp:"title like $%v or data::text like $%v"`
+		Status CrudObjectStatusArray `json:"status" cmp:"status=any($%v)"`
+		Empty  int                   `json:"empty"`
 	} `json:"where" join:"and"`
 	QueryRow struct {
-		Enabled bool    `json:"enabled" scan:"-"`
-		Simple  *Simple `json:"simple"`
-		UserID  int64   `json:"user_id" scan:"user_id#all"`
-	} `json:"query" filter:"#all"`
+		Enabled bool        `json:"enabled" scan:"-"`
+		Object  *CrudObject `json:"object"`
+		UserID  int64       `json:"user_id" scan:"user_id#all"`
+	} `json:"query_row" filter:"#all"`
 }
 
 func TestUnify(t *testing.T) {
+	clearPG()
+	testUnify(t, getPG())
+}
+
+func testUnify(t *testing.T, queryer Queryer) {
 	var err error
-	list := &ListSimpleUnify{}
-	list.Where.UserID = 100
-	list.Where.Type = 10
-	list.Where.Key.Title = "%a%"
-	list.Where.Key.Data = "%a%"
-	list.Where.Status = []int{10, 100}
-	list.Query.Enabled = true
-	list.Count.Enabled = true
-	find := &FindSimpleUnify{}
-	find.Where.UserID = 100
-	find.Where.Type = 10
-	find.Where.Key = "%a%"
-	find.Where.Status = []int{10, 100}
-	find.QueryRow.Enabled = true
-
-	//
-	where, args := AppendWhereUnify(nil, nil, list)
-	fmt.Println("AppendWhereUnify-->", strings.Join(where, " and "), args)
-	sql, args := JoinWhereUnify("select tid from crud_simple", nil, list)
-	fmt.Println("JoinWhereUnify-->", sql, args)
-	sql, args = Default.JoinWhereUnify("select tid from crud_simple", nil, list)
-	fmt.Println("JoinWhereUnify-->", sql, args)
-	sql = JoinPageUnify(sql, list)
-	fmt.Println("JoinPageUnify-->", sql)
-	sql = Default.JoinPageUnify(sql, list)
-	fmt.Println("JoinPageUnify-->", sql)
-	sql, args = QueryUnifySQL(list)
-	fmt.Println("QueryUnifySQL-->", sql, args)
-	sql, args = Default.QueryUnifySQL(list)
-	fmt.Println("QueryUnifySQL-->", sql, args)
-	modelValue, queryFilter, dests := ScanUnifyDest(list, "Query")
-	if modelValue != &list.Model || queryFilter != "#all" || len(dests) != 3 {
-		t.Errorf("%v,%v,%v", reflect.TypeOf(modelValue), queryFilter, len(dests))
-		return
+	addTestMultiObject(queryer)
+	newSearch := func() *SearchCrudObjectUnify {
+		search := &SearchCrudObjectUnify{}
+		search.Where.UserID = 100
+		search.Where.Type = CrudObjectTypeA
+		search.Where.Key.Title = "%a%"
+		search.Where.Key.Data = "%a%"
+		search.Where.Status = CrudObjectStatusShow
+		search.Query.Enabled = true
+		search.Count.Enabled = true
+		search.Page.Offset = 0
+		search.Page.Limit = 100
+		return search
 	}
-	sql, args = CountUnifySQL(list)
-	fmt.Println("CountUnifySQL-->", sql, args)
-	sql, args = Default.CountUnifySQL(list)
-	fmt.Println("CountUnifySQL-->", sql, args)
-	modelValue, queryFilter, dests = CountUnifyDest(list)
-	if len(modelValue.([]interface{})) != 3 || queryFilter != "count(tid),max(user_id)#all" || len(dests) != 4 {
-		t.Errorf("%v,%v,%v", len(modelValue.([]interface{})), queryFilter, len(dests))
-		return
+	newFind := func() *FindCrudObjectUnify {
+		find := &FindCrudObjectUnify{}
+		find.Where.UserID = 100
+		find.Where.Type = CrudObjectTypeA
+		find.Where.Key = "%a%"
+		find.Where.Status = CrudObjectStatusShow
+		find.QueryRow.Enabled = true
+		return find
 	}
-
-	list.Query.Simples = nil
-	list.Query.UserIDs = nil
-	err = QueryUnify(NewPoolQueryer(), list)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		search := newSearch()
+		err = ApplyUnify(queryer, context.Background(), search)
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
+		find := newFind()
+		err = Default.ApplyUnify(queryer, context.Background(), find)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("QueryUnify-->", jsonString(list))
-	if len(list.Query.UserIDs) != 3 || len(list.Query.Simples) != 3 {
-		t.Error("error")
-		return
+	{
+		search := newSearch()
+		err = QueryUnify(queryer, context.Background(), search)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = CountUnify(queryer, context.Background(), search)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	list.Query.Simples = nil
-	list.Query.UserIDs = nil
-	err = Default.QueryUnify(NewPoolQueryer(), list)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		search := newSearch()
+		err = Default.QueryUnify(queryer, context.Background(), search)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = Default.CountUnify(queryer, context.Background(), search)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("QueryUnify-->", jsonString(list))
-	if len(list.Query.UserIDs) != 3 || len(list.Query.Simples) != 3 {
-		t.Error("error")
-		return
+	{
+		find := newFind()
+		err = QueryUnifyRow(queryer, context.Background(), find)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-
-	list.Query.Simples = nil
-	list.Query.UserIDs = nil
-	rows, _ := NewPoolQueryer().Query("select")
-	err = ScanUnify(rows, list)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		find := newFind()
+		err = Default.QueryUnifyRow(queryer, context.Background(), find)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("ScanUnify-->", jsonString(list))
-	if len(list.Query.UserIDs) != 3 || len(list.Query.Simples) != 3 {
-		t.Error("error")
-		return
+	{
+		search := newSearch()
+		querySQL, queryArgs := QueryUnifySQL(search, "Query")
+		rows, err := queryer.Query(context.Background(), querySQL, queryArgs...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = ScanUnify(rows, search)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		rows.Close()
+		countSQL, countArgs := CountUnifySQL(search)
+		row := queryer.QueryRow(context.Background(), countSQL, countArgs...)
+		modelValue, queryFilter, dests := CountUnifyDest(search)
+		err = ScanRow(row, modelValue, queryFilter, dests...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-
-	find.QueryRow.Simple = nil
-	find.QueryRow.UserID = 0
-	err = QueryUnifyRow(NewPoolQueryer(), find)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		search := newSearch()
+		querySQL, queryArgs := Default.QueryUnifySQL(search, "Query")
+		rows, err := queryer.Query(context.Background(), querySQL, queryArgs...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = Default.ScanUnify(rows, search)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		rows.Close()
+		countSQL, countArgs := Default.CountUnifySQL(search)
+		row := queryer.QueryRow(context.Background(), countSQL, countArgs...)
+		modelValue, queryFilter, dests := Default.CountUnifyDest(search)
+		err = Default.ScanRow(row, modelValue, queryFilter, dests...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("QueryUnifyRow-->", jsonString(find))
-	if find.QueryRow.UserID < 1 || find.QueryRow.Simple == nil {
-		t.Error("error")
-		return
+	{
+		search := newSearch()
+		querySQL := QuerySQL(&search.Model, "#all")
+		querySQL, queryArgs := JoinWhereUnify(querySQL, nil, search)
+		querySQL = JoinPageUnify(querySQL, search)
+		rows, err := queryer.Query(context.Background(), querySQL, queryArgs...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = ScanUnify(rows, search)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		rows.Close()
+		countSQL, countArgs := CountUnifySQL(search)
+		row := queryer.QueryRow(context.Background(), countSQL, countArgs...)
+		modelValue, queryFilter, dests := CountUnifyDest(search)
+		err = ScanRow(row, modelValue, queryFilter, dests...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	find.QueryRow.Simple = nil
-	find.QueryRow.UserID = 0
-	err = Default.QueryUnifyRow(NewPoolQueryer(), find)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		search := newSearch()
+		querySQL := Default.QuerySQL(&search.Model, "#all")
+		querySQL, queryArgs := Default.JoinWhereUnify(querySQL, nil, search)
+		querySQL = Default.JoinPageUnify(querySQL, search)
+		rows, err := queryer.Query(context.Background(), querySQL, queryArgs...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = ScanUnify(rows, search)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		rows.Close()
+		countSQL, countArgs := Default.CountUnifySQL(search)
+		row := queryer.QueryRow(context.Background(), countSQL, countArgs...)
+		modelValue, queryFilter, dests := Default.CountUnifyDest(search)
+		err = ScanRow(row, modelValue, queryFilter, dests...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("QueryUnifyRow-->", jsonString(list))
-	if find.QueryRow.UserID < 1 || find.QueryRow.Simple == nil {
-		t.Error("error")
-		return
+	{
+		find := newFind()
+		querySQL, queryArgs := Default.QueryUnifySQL(find, "QueryRow")
+		row := queryer.QueryRow(context.Background(), querySQL, queryArgs...)
+		err = ScanUnifyRow(row, find)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-
-	find.QueryRow.Simple = nil
-	find.QueryRow.UserID = 0
-	row := NewPoolQueryer().QueryRow("select")
-	err = ScanUnifyRow(row, find)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		find := newFind()
+		querySQL, queryArgs := Default.QueryUnifySQL(find, "QueryRow")
+		row := queryer.QueryRow(context.Background(), querySQL, queryArgs...)
+		modelValue, queryFilter, dests := ScanUnifyDest(find, "QueryRow")
+		err = ScanRow(row, modelValue, queryFilter, dests...)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("ScanUnifyRow-->", jsonString(find))
-	if find.QueryRow.UserID < 1 || find.QueryRow.Simple == nil {
-		t.Error("error")
-		return
+	{
+		find := newFind()
+		querySQL := QuerySQL(&find.Model, "#all")
+		querySQL, queryArgs := JoinWhereUnify(querySQL, nil, find)
+		row := queryer.QueryRow(context.Background(), querySQL, queryArgs...)
+		modelValue, queryFilter, dests := ScanUnifyDest(find, "QueryRow")
+		err = ScanRow(row, modelValue, queryFilter, dests...)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-
-	list.Query.Simples = nil
-	list.Query.UserIDs = nil
-	err = CountUnify(NewPoolQueryer(), list)
-	if err != nil {
-		t.Error(err)
-		return
+	{
+		find := newFind()
+		querySQL := QuerySQL(&find.Model, "#all")
+		querySQL, queryArgs := Default.JoinWhereUnify(querySQL, nil, find)
+		row := queryer.QueryRow(context.Background(), querySQL, queryArgs...)
+		modelValue, queryFilter, dests := ScanUnifyDest(find, "QueryRow")
+		err = ScanRow(row, modelValue, queryFilter, dests...)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
-	fmt.Println("CountUnify-->", jsonString(list))
-	if list.Count.All < 1 || list.Count.UserID < 1 {
-		t.Error("error")
-		return
-	}
-	list.Query.Simples = nil
-	list.Query.UserIDs = nil
-	err = Default.CountUnify(NewPoolQueryer(), list)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	fmt.Println("CountUnify-->", jsonString(list))
-	if list.Count.All < 1 || list.Count.UserID < 1 {
-		t.Error("error")
-		return
-	}
-
-	find.QueryRow.Simple = nil
-	find.QueryRow.UserID = 0
-	err = QueryUnifyRow(NewPoolQueryer(), find)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	fmt.Println("QueryUnifyRow-->", jsonString(find))
-	if find.QueryRow.UserID < 1 || find.QueryRow.Simple == nil {
-		t.Error("error")
-		return
-	}
-
-	find.QueryRow.Simple = nil
-	find.QueryRow.UserID = 0
-	err = ApplyUnify(NewPoolQueryer(), find)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	fmt.Println("ApplyUnify-->", jsonString(find))
-	if find.QueryRow.UserID < 1 || find.QueryRow.Simple == nil {
-		t.Error("error")
-		return
-	}
-	list.Query.Simples = nil
-	list.Query.UserIDs = nil
-	err = ApplyUnify(NewPoolQueryer(), list)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	fmt.Println("ApplyUnify-->", jsonString(list))
-	if len(list.Query.UserIDs) != 3 || len(list.Query.Simples) != 3 || list.Count.All < 1 || list.Count.UserID < 1 {
-		t.Error("error")
-		return
-	}
-	list.Query.Simples = nil
-	list.Query.UserIDs = nil
-	err = Default.ApplyUnify(NewPoolQueryer(), list)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	fmt.Println("ApplyUnify-->", jsonString(list))
-	if len(list.Query.UserIDs) != 3 || len(list.Query.Simples) != 3 || list.Count.All < 1 || list.Count.UserID < 1 {
-		t.Error("error")
-		return
+	{
+		find := newFind()
+		querySQL := QuerySQL(&find.Model, "#all")
+		where, queryArgs := AppendWhereUnify(nil, nil, find)
+		querySQL = JoinWhere(querySQL, where, "and")
+		row := queryer.QueryRow(context.Background(), querySQL, queryArgs...)
+		modelValue, queryFilter, dests := ScanUnifyDest(find, "QueryRow")
+		err = ScanRow(row, modelValue, queryFilter, dests...)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
 	}
 }
 
-func TestError(t *testing.T) {
+type ErrorCrudObjectUnify struct {
+	Model CrudObject `json:"model"`
+	Where struct {
+		UserID int64                 `json:"user_id"`
+		Type   CrudObjectType        `json:"type" filter:"#all"`
+		Status CrudObjectStatusArray `json:"status" cmp:"statusxx=any($%v)"`
+	} `json:"where" join:"and"`
+	Page struct {
+		Order  string `json:"order" default:"order by tid desc"`
+		Offset int    `json:"offset"`
+		Limit  int    `json:"limit"`
+	} `json:"page"`
+	Query struct {
+		Enabled bool          `json:"enabled" scan:"-"`
+		Objects []*CrudObject `json:"objects"`
+		UserIDs []int64       `json:"user_ids" scan:"user_id#all"`
+	} `json:"query" filter:"#all"`
+	Count struct {
+		Enabled bool  `json:"enabled" scan:"-"`
+		All     int64 `json:"all" scan:"tid"`
+		UserID  int64 `json:"user_id" scan:"user_id"`
+	} `json:"count" filter:"count(tid),max(user_id)#all"`
+	QueryRow struct {
+		Enabled bool        `json:"enabled" scan:"-"`
+		Object  *CrudObject `json:"object"`
+		UserID  int64       `json:"user_id" scan:"user_id#all"`
+	} `json:"query_row" filter:"#all"`
+}
+
+func TestUnifyError(t *testing.T) {
+	clearPG()
+	testUnifyError(t, getPG())
+}
+
+func testUnifyError(t *testing.T, queryer Queryer) {
 	var err error
-	list := &ListSimpleUnify{}
-	list.Where.UserID = 100
-	list.Where.Type = 10
-	list.Where.Key.Title = "%a%"
-	list.Where.Key.Data = "%a%"
-	list.Where.Status = []int{10, 100}
-	find := &FindSimpleUnify{}
-	find.Where.UserID = 100
-	find.Where.Type = 10
-	find.Where.Key = "%a%"
-	find.Where.Status = []int{10, 100}
-	{ //insert error
-		simple := &Simple{}
-		pool := NewPoolQueryer()
-
-		//
-		pool.QueryMode = "no"
-		_, err = InsertFilter(pool, simple, "^tid#all", "returning", "tid#all")
-		if err != Default.ErrNoRows {
-			t.Error(err)
-			return
-		}
-
-		//
-		pool.QueryErr = fmt.Errorf("error")
-		_, err = InsertFilter(pool, simple, "^tid#all", "returning", "tid#all")
-		if err == nil {
-			t.Error(err)
-			return
-		}
+	search := &ErrorCrudObjectUnify{}
+	search.Where.UserID = 100
+	search.Where.Type = CrudObjectTypeA
+	search.Where.Status = CrudObjectStatusShow
+	search.Query.Enabled = true
+	search.Count.Enabled = true
+	search.Page.Offset = 0
+	search.Page.Limit = 100
+	err = QueryUnify(queryer, context.Background(), search)
+	if err == nil {
+		t.Error(err)
+		return
 	}
-	{ //update error
-		simple := &Simple{}
-		pool := NewPoolQueryer()
-
-		//
-		pool.ExecAffected = 1
-		pool.ExecErr = fmt.Errorf("error")
-		_, sets, args := UpdateArgs(simple, "", nil)
-		_, err = Update(pool, simple, sets, nil, "", args)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		_, err = UpdateFilter(pool, simple, "title,image,update_time,status", nil, "", nil)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		_, err = UpdateWheref(pool, simple, "title,image,update_time,status", "")
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-
-		//
-		pool.ExecAffected = 0
-		pool.ExecErr = nil
-		err = UpdateRow(pool, simple, sets, nil, "", args)
-		if err != Default.ErrNoRows {
-			t.Error("not error")
-			return
-		}
-		err = UpdateFilterRow(pool, simple, "title,image,update_time,status", nil, "", nil)
-		if err != Default.ErrNoRows {
-			t.Error("not error")
-			return
-		}
-		err = UpdateRowWheref(pool, simple, "title,image,update_time,status", "")
-		if err == nil {
-			t.Error("not error")
-			return
-		}
+	err = QueryUnifyRow(queryer, context.Background(), search)
+	if err == nil {
+		t.Error(err)
+		return
 	}
-	{ //query error
-		var images []*string
-		err = Query(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&images,
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = Query(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&images, 1,
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = Query(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&images, "",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = Query(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&images, "not",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = QueryRow(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&images, "not",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = QueryRow(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"no", []interface{}{"arg"},
-			&images, "image",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		//
-		var simples map[int64]*Simple
-		err = Query(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples,
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = Query(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples, 1,
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = Query(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples, "",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = Query(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples, "not",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = Query(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples, "tid:not",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-
-		//
-		err = Query(
-			NewPoolQueryer(), &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			1,
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-
-		//
-		err = Query(
-			&PoolQueryer{QueryErr: fmt.Errorf("xx")}, &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples, "tid",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-		err = Query(
-			&PoolQueryer{ScanErr: fmt.Errorf("xx")}, &Simple{}, "#all",
-			"sql", []interface{}{"arg"},
-			&simples, "tid",
-		)
-		if err == nil {
-			t.Error("not error")
-			return
-		}
-
-		//
-		find.QueryRow.Simple = nil
-		find.QueryRow.UserID = 0
-		err = QueryUnify(&PoolQueryer{QueryErr: fmt.Errorf("xx")}, find)
-		if err == nil {
-			t.Error(err)
-			return
-		}
-		find.QueryRow.Simple = nil
-		find.QueryRow.UserID = 0
-		err = QueryUnifyRow(&PoolQueryer{ScanErr: fmt.Errorf("xx")}, find)
-		if err == nil {
-			t.Error(err)
-			return
-		}
-		func() {
-			defer func() {
-				recover()
-			}()
-			QueryUnifyRow(&PoolQueryer{ScanErr: fmt.Errorf("xx")}, list)
+	err = CountUnify(queryer, context.Background(), search)
+	if err == nil {
+		t.Error(err)
+		return
+	}
+	func() {
+		defer func() {
+			recover()
 		}()
-	}
-	{ //count error
-		var countValue int64
-		simple := &Simple{}
-		pool := NewPoolQueryer()
-
-		//
-		pool.QueryMode = "no"
-		err = CountWheref(pool, simple, "count(tid)#all", "", nil, "", &countValue, "tid")
-		if err != Default.ErrNoRows {
-			t.Error(err)
-			return
-		}
-
-		//
-		pool.QueryErr = fmt.Errorf("error")
-		err = CountWheref(pool, simple, "count(tid)#all", "", nil, "", &countValue, "tid")
-		if err == nil {
-			t.Error(err)
-			return
-		}
-		list.Query.Simples = nil
-		list.Query.UserIDs = nil
-		err = CountUnify(pool, list)
-		if err == nil {
-			t.Error(err)
-			return
-		}
-	}
-	{ //dest error
-		var countValue int64
-		simple := &Simple{}
-		pool := NewPoolQueryer()
-
-		//
-		err = CountWheref(pool, simple, "count(tid)#all", "", nil, "", &countValue, "title#all")
-		if err == nil || !strings.Contains(err.Error(), "not supported on dests[0] to set") {
-			t.Error(err)
-			return
-		}
-		//
-		err = CountWheref(pool, []interface{}{int64(0)}, "count(tid)#all", "", nil, "", &countValue, "none#all")
-		if err == nil {
-			t.Error(err)
-			return
-		}
-	}
+		ScanUnifyDest(search, "Abc")
+		t.Error("eror")
+	}()
 }

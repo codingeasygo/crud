@@ -1,2 +1,9 @@
 
 temp.json
+gen/autogen
+gen/crud.sqlite
+pgx/autogen
+*.out
+coverage.html
+coverage.json
+coverage.xml

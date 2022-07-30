@@ -2,6 +2,7 @@
 package crud
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -40,7 +41,10 @@ func NewValue(v interface{}) (value reflect.Value) {
 		value = reflect.ValueOf(result)
 		return
 	}
-	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectValue := reflect.ValueOf(v)
+	if reflect.Indirect(reflectValue).Kind() == reflect.Struct { //only for struct
+		reflectValue = reflect.Indirect(reflectValue)
+	}
 	reflectType := reflectValue.Type()
 	value = reflect.New(reflectType)
 	return
@@ -64,7 +68,7 @@ var Default = &CRUD{
 		},
 	},
 	ArgFormat: "$%v",
-	ErrNoRows: fmt.Errorf("no rows"),
+	ErrNoRows: nil,
 	Log: func(caller int, format string, args ...interface{}) {
 		log.Output(caller+3, fmt.Sprintf(format, args...))
 	},
@@ -85,6 +89,15 @@ type CRUD struct {
 	Verbose   bool
 	Log       LogF
 	ParmConv  ParmConv
+}
+
+func (c *CRUD) getErrNoRows() (err error) {
+	if c.ErrNoRows == nil {
+		err = ErrNoRows
+	} else {
+		err = c.ErrNoRows
+	}
+	return
 }
 
 func Table(v interface{}) (table string) {
@@ -475,6 +488,7 @@ func (c *CRUD) JoinPageUnify(sql string, v interface{}) (sql_ string) {
 }
 
 func (c *CRUD) joinPageUnify(caller int, sql string, v interface{}) (sql_ string) {
+	sql_ = sql
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	pageValue := reflectValue.FieldByName("Page")
@@ -501,37 +515,49 @@ func (c *CRUD) joinPageUnify(caller int, sql string, v interface{}) (sql_ string
 	if limitValue.IsValid() {
 		limit = int(limitValue.Int())
 	}
-	sql_ = c.joinPage(caller+1, sql, order, offset, limit)
+	sql_ = c.joinPage(caller+1, sql_, order, offset, limit)
 	return
 }
 
-func (c *CRUD) queryerExec(queryer interface{}, sql string, args []interface{}) (affected int64, err error) {
+func (c *CRUD) queryerExec(queryer interface{}, ctx context.Context, sql string, args []interface{}) (insertId, affected int64, err error) {
+	reflectValue := reflect.ValueOf(queryer)
+	if reflectValue.Kind() == reflect.Func {
+		queryer = reflectValue.Call(nil)[0].Interface()
+	}
 	if q, ok := queryer.(Queryer); ok {
-		affected, err = q.Exec(sql, args...)
+		insertId, affected, err = q.Exec(ctx, sql, args...)
 	} else if q, ok := queryer.(CrudQueryer); ok {
-		affected, err = q.CrudExec(sql, args...)
+		insertId, affected, err = q.CrudExec(ctx, sql, args...)
 	} else {
 		panic("queryer is not supported")
 	}
 	return
 }
 
-func (c *CRUD) queryerQuery(queryer interface{}, sql string, args []interface{}) (rows Rows, err error) {
+func (c *CRUD) queryerQuery(queryer interface{}, ctx context.Context, sql string, args []interface{}) (rows Rows, err error) {
+	reflectValue := reflect.ValueOf(queryer)
+	if reflectValue.Kind() == reflect.Func {
+		queryer = reflectValue.Call(nil)[0].Interface()
+	}
 	if q, ok := queryer.(Queryer); ok {
-		rows, err = q.Query(sql, args...)
+		rows, err = q.Query(ctx, sql, args...)
 	} else if q, ok := queryer.(CrudQueryer); ok {
-		rows, err = q.CrudQuery(sql, args...)
+		rows, err = q.CrudQuery(ctx, sql, args...)
 	} else {
 		panic(fmt.Sprintf("queryer %v is not supported", reflect.TypeOf(queryer)))
 	}
 	return
 }
 
-func (c *CRUD) queryerQueryRow(queryer interface{}, sql string, args []interface{}) (row Row) {
+func (c *CRUD) queryerQueryRow(queryer interface{}, ctx context.Context, sql string, args []interface{}) (row Row) {
+	reflectValue := reflect.ValueOf(queryer)
+	if reflectValue.Kind() == reflect.Func {
+		queryer = reflectValue.Call(nil)[0].Interface()
+	}
 	if q, ok := queryer.(Queryer); ok {
-		row = q.QueryRow(sql, args...)
+		row = q.QueryRow(ctx, sql, args...)
 	} else if q, ok := queryer.(CrudQueryer); ok {
-		row = q.CrudQueryRow(sql, args...)
+		row = q.CrudQueryRow(ctx, sql, args...)
 	} else {
 		panic(fmt.Sprintf("queryer %v is not supported", reflect.TypeOf(queryer)))
 	}
@@ -579,21 +605,21 @@ func (c *CRUD) insertSQL(caller int, v interface{}, filter string, suffix ...str
 	return
 }
 
-func InsertFilter(queryer, v interface{}, filter, join, scan string) (affected int64, err error) {
-	affected, err = Default.insertFilter(1, queryer, v, filter, join, scan)
+func InsertFilter(queryer interface{}, ctx context.Context, v interface{}, filter, join, scan string) (insertId int64, err error) {
+	insertId, err = Default.insertFilter(1, queryer, ctx, v, filter, join, scan)
 	return
 }
 
-func (c *CRUD) InsertFilter(queryer, v interface{}, filter, join, scan string) (affected int64, err error) {
-	affected, err = c.insertFilter(1, queryer, v, filter, join, scan)
+func (c *CRUD) InsertFilter(queryer interface{}, ctx context.Context, v interface{}, filter, join, scan string) (insertId int64, err error) {
+	insertId, err = c.insertFilter(1, queryer, ctx, v, filter, join, scan)
 	return
 }
 
-func (c *CRUD) insertFilter(caller int, queryer, v interface{}, filter, join, scan string) (affected int64, err error) {
+func (c *CRUD) insertFilter(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, join, scan string) (insertId int64, err error) {
 	table, fields, param, args := c.insertArgs(caller+1, v, filter)
 	sql := fmt.Sprintf(`insert into %v(%v) values(%v)`, table, strings.Join(fields, ","), strings.Join(param, ","))
 	if len(scan) < 1 {
-		affected, err = c.queryerExec(queryer, sql, args)
+		insertId, _, err = c.queryerExec(queryer, ctx, sql, args)
 		return
 	}
 	_, scanFields := c.queryField(caller+1, v, scan)
@@ -602,7 +628,7 @@ func (c *CRUD) insertFilter(caller int, queryer, v interface{}, filter, join, sc
 		sql += " " + join
 	}
 	sql += " " + strings.Join(scanFields, ",")
-	err = c.queryerQueryRow(queryer, sql, args).Scan(scanArgs...)
+	err = c.queryerQueryRow(queryer, ctx, sql, args).Scan(scanArgs...)
 	if err != nil {
 		if c.Verbose {
 			c.Log(caller, "CRUD insert filter by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
@@ -656,21 +682,19 @@ func (c *CRUD) updateSQL(caller int, v interface{}, filter string, args []interf
 	return
 }
 
-func Update(queryer, v interface{}, sets, where []string, sep string, args []interface{}) (affected int64, err error) {
-	affected, err = Default.update(1, queryer, v, sets, where, sep, args)
+func Update(queryer interface{}, ctx context.Context, v interface{}, sql string, where []string, sep string, args []interface{}) (affected int64, err error) {
+	affected, err = Default.update(1, queryer, ctx, v, sql, where, sep, args)
 	return
 }
 
-func (c *CRUD) Update(queryer, v interface{}, sets, where []string, sep string, args []interface{}) (affected int64, err error) {
-	affected, err = c.update(1, queryer, v, sets, where, sep, args)
+func (c *CRUD) Update(queryer interface{}, ctx context.Context, v interface{}, sql string, where []string, sep string, args []interface{}) (affected int64, err error) {
+	affected, err = c.update(1, queryer, ctx, v, sql, where, sep, args)
 	return
 }
 
-func (c *CRUD) update(caller int, queryer, v interface{}, sets, where []string, sep string, args []interface{}) (affected int64, err error) {
-	table := c.Table(v)
-	sql := fmt.Sprintf(`update %v set %v`, table, strings.Join(sets, ","))
+func (c *CRUD) update(caller int, queryer interface{}, ctx context.Context, v interface{}, sql string, where []string, sep string, args []interface{}) (affected int64, err error) {
 	sql = c.joinWhere(caller+1, sql, where, sep)
-	affected, err = c.queryerExec(queryer, sql, args)
+	_, affected, err = c.queryerExec(queryer, ctx, sql, args)
 	if err != nil {
 		if c.Verbose {
 			c.Log(caller, "CRUD update by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
@@ -683,38 +707,83 @@ func (c *CRUD) update(caller int, queryer, v interface{}, sets, where []string, 
 	return
 }
 
-func UpdateRow(queryer, v interface{}, sets, where []string, sep string, args []interface{}) (err error) {
-	err = Default.updateRow(1, queryer, v, sets, where, sep, args)
+func UpdateRow(queryer interface{}, ctx context.Context, v interface{}, sql string, where []string, sep string, args []interface{}) (err error) {
+	err = Default.updateRow(1, queryer, ctx, v, sql, where, sep, args)
 	return
 }
 
-func (c *CRUD) UpdateRow(queryer, v interface{}, sets, where []string, sep string, args []interface{}) (err error) {
-	err = c.updateRow(1, queryer, v, sets, where, sep, args)
+func (c *CRUD) UpdateRow(queryer interface{}, ctx context.Context, v interface{}, sql string, where []string, sep string, args []interface{}) (err error) {
+	err = c.updateRow(1, queryer, ctx, v, sql, where, sep, args)
 	return
 }
 
-func (c *CRUD) updateRow(caller int, queryer, v interface{}, sets, where []string, sep string, args []interface{}) (err error) {
-	affected, err := c.update(caller+1, queryer, v, sets, where, sep, args)
+func (c *CRUD) updateRow(caller int, queryer interface{}, ctx context.Context, v interface{}, sql string, where []string, sep string, args []interface{}) (err error) {
+	affected, err := c.update(caller+1, queryer, ctx, v, sql, where, sep, args)
 	if err == nil && affected < 1 {
-		err = c.ErrNoRows
+		err = c.getErrNoRows()
 	}
 	return
 }
 
-func UpdateFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}) (affected int64, err error) {
-	affected, err = Default.updateFilter(1, queryer, v, filter, where, sep, args)
+func UpdateSet(queryer interface{}, ctx context.Context, v interface{}, sets, where []string, sep string, args []interface{}) (affected int64, err error) {
+	affected, err = Default.updateSet(1, queryer, ctx, v, sets, where, sep, args)
 	return
 }
 
-func (c *CRUD) UpdateFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}) (affected int64, err error) {
-	affected, err = c.updateFilter(1, queryer, v, filter, where, sep, args)
+func (c *CRUD) UpdateSet(queryer interface{}, ctx context.Context, v interface{}, sets, where []string, sep string, args []interface{}) (affected int64, err error) {
+	affected, err = c.updateSet(1, queryer, ctx, v, sets, where, sep, args)
 	return
 }
 
-func (c *CRUD) updateFilter(caller int, queryer, v interface{}, filter string, where []string, sep string, args []interface{}) (affected int64, err error) {
+func (c *CRUD) updateSet(caller int, queryer interface{}, ctx context.Context, v interface{}, sets, where []string, sep string, args []interface{}) (affected int64, err error) {
+	table := c.Table(v)
+	sql := fmt.Sprintf(`update %v set %v`, table, strings.Join(sets, ","))
+	sql = c.joinWhere(caller+1, sql, where, sep)
+	_, affected, err = c.queryerExec(queryer, ctx, sql, args)
+	if err != nil {
+		if c.Verbose {
+			c.Log(caller, "CRUD update by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
+		}
+		return
+	}
+	if c.Verbose {
+		c.Log(caller, "CRUD update by struct:%v,sql:%v,args:%v, result is success affected:%v", reflect.TypeOf(v), sql, jsonString(args), affected)
+	}
+	return
+}
+
+func UpdateSetRow(queryer interface{}, ctx context.Context, v interface{}, sets, where []string, sep string, args []interface{}) (err error) {
+	err = Default.updateSetRow(1, queryer, ctx, v, sets, where, sep, args)
+	return
+}
+
+func (c *CRUD) UpdateSetRow(queryer interface{}, ctx context.Context, v interface{}, sets, where []string, sep string, args []interface{}) (err error) {
+	err = c.updateSetRow(1, queryer, ctx, v, sets, where, sep, args)
+	return
+}
+
+func (c *CRUD) updateSetRow(caller int, queryer interface{}, ctx context.Context, v interface{}, sets, where []string, sep string, args []interface{}) (err error) {
+	affected, err := c.updateSet(caller+1, queryer, ctx, v, sets, where, sep, args)
+	if err == nil && affected < 1 {
+		err = c.getErrNoRows()
+	}
+	return
+}
+
+func UpdateFilter(queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}) (affected int64, err error) {
+	affected, err = Default.updateFilter(1, queryer, ctx, v, filter, where, sep, args)
+	return
+}
+
+func (c *CRUD) UpdateFilter(queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}) (affected int64, err error) {
+	affected, err = c.updateFilter(1, queryer, ctx, v, filter, where, sep, args)
+	return
+}
+
+func (c *CRUD) updateFilter(caller int, queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}) (affected int64, err error) {
 	sql, args := c.updateSQL(caller+1, v, filter, args)
 	sql = c.joinWhere(caller+1, sql, where, sep)
-	affected, err = c.queryerExec(queryer, sql, args)
+	_, affected, err = c.queryerExec(queryer, ctx, sql, args)
 	if err != nil {
 		if c.Verbose {
 			c.Log(caller, "CRUD update filter by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
@@ -727,38 +796,38 @@ func (c *CRUD) updateFilter(caller int, queryer, v interface{}, filter string, w
 	return
 }
 
-func UpdateFilterRow(queryer, v interface{}, filter string, where []string, sep string, args []interface{}) (err error) {
-	err = Default.updateFilterRow(1, queryer, v, filter, where, sep, args)
+func UpdateFilterRow(queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}) (err error) {
+	err = Default.updateFilterRow(1, queryer, ctx, v, filter, where, sep, args)
 	return
 }
 
-func (c *CRUD) UpdateFilterRow(queryer, v interface{}, filter string, where []string, sep string, args []interface{}) (err error) {
-	err = c.updateFilterRow(1, queryer, v, filter, where, sep, args)
+func (c *CRUD) UpdateFilterRow(queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}) (err error) {
+	err = c.updateFilterRow(1, queryer, ctx, v, filter, where, sep, args)
 	return
 }
 
-func (c *CRUD) updateFilterRow(caller int, queryer, v interface{}, filter string, where []string, sep string, args []interface{}) (err error) {
-	affected, err := c.updateFilter(caller+1, queryer, v, filter, where, sep, args)
+func (c *CRUD) updateFilterRow(caller int, queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}) (err error) {
+	affected, err := c.updateFilter(caller+1, queryer, ctx, v, filter, where, sep, args)
 	if err == nil && affected < 1 {
-		err = c.ErrNoRows
+		err = c.getErrNoRows()
 	}
 	return
 }
 
-func UpdateWheref(queryer, v interface{}, filter, formats string, args ...interface{}) (affected int64, err error) {
-	affected, err = Default.updateWheref(1, queryer, v, filter, formats, args...)
+func UpdateWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args ...interface{}) (affected int64, err error) {
+	affected, err = Default.updateWheref(1, queryer, ctx, v, filter, formats, args...)
 	return
 }
 
-func (c *CRUD) UpdateWheref(queryer, v interface{}, filter, formats string, args ...interface{}) (affected int64, err error) {
-	affected, err = c.updateWheref(1, queryer, v, filter, formats, args...)
+func (c *CRUD) UpdateWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args ...interface{}) (affected int64, err error) {
+	affected, err = c.updateWheref(1, queryer, ctx, v, filter, formats, args...)
 	return
 }
 
-func (c *CRUD) updateWheref(caller int, queryer, v interface{}, filter, formats string, args ...interface{}) (affected int64, err error) {
+func (c *CRUD) updateWheref(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args ...interface{}) (affected int64, err error) {
 	sql, sqlArgs := c.updateSQL(caller+1, v, filter, nil)
 	sql, sqlArgs = c.joinWheref(caller+1, sql, sqlArgs, formats, args...)
-	affected, err = c.queryerExec(queryer, sql, sqlArgs)
+	_, affected, err = c.queryerExec(queryer, ctx, sql, sqlArgs)
 	if err != nil {
 		if c.Verbose {
 			c.Log(caller, "CRUD update wheref by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(sqlArgs), err)
@@ -771,20 +840,20 @@ func (c *CRUD) updateWheref(caller int, queryer, v interface{}, filter, formats 
 	return
 }
 
-func UpdateRowWheref(queryer, v interface{}, filter, formats string, args ...interface{}) (err error) {
-	err = Default.updateRowWheref(1, queryer, v, filter, formats, args...)
+func UpdateRowWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args ...interface{}) (err error) {
+	err = Default.updateRowWheref(1, queryer, ctx, v, filter, formats, args...)
 	return
 }
 
-func (c *CRUD) UpdateRowWheref(queryer, v interface{}, filter, formats string, args ...interface{}) (err error) {
-	err = c.updateRowWheref(1, queryer, v, filter, formats, args)
+func (c *CRUD) UpdateRowWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args ...interface{}) (err error) {
+	err = c.updateRowWheref(1, queryer, ctx, v, filter, formats, args...)
 	return
 }
 
-func (c *CRUD) updateRowWheref(caller int, queryer, v interface{}, filter, formats string, args ...interface{}) (err error) {
-	affected, err := c.updateWheref(caller+1, queryer, v, filter, formats, args)
+func (c *CRUD) updateRowWheref(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args ...interface{}) (err error) {
+	affected, err := c.updateWheref(caller+1, queryer, ctx, v, filter, formats, args...)
 	if err == nil && affected < 1 {
-		err = c.ErrNoRows
+		err = c.getErrNoRows()
 	}
 	return
 }
@@ -836,21 +905,21 @@ func (c *CRUD) querySQL(caller int, v interface{}, filter string, suffix ...stri
 	return
 }
 
-func QueryUnifySQL(v interface{}) (sql string, args []interface{}) {
-	sql, args = Default.queryUnifySQL(1, v)
+func QueryUnifySQL(v interface{}, field string) (sql string, args []interface{}) {
+	sql, args = Default.queryUnifySQL(1, v, field)
 	return
 }
 
-func (c *CRUD) QueryUnifySQL(v interface{}) (sql string, args []interface{}) {
-	sql, args = c.queryUnifySQL(1, v)
+func (c *CRUD) QueryUnifySQL(v interface{}, field string) (sql string, args []interface{}) {
+	sql, args = c.queryUnifySQL(1, v, field)
 	return
 }
 
-func (c *CRUD) queryUnifySQL(caller int, v interface{}) (sql string, args []interface{}) {
+func (c *CRUD) queryUnifySQL(caller int, v interface{}, field string) (sql string, args []interface{}) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	modelValue := reflectValue.FieldByName("Model")
-	queryType, _ := reflectType.FieldByName("Query")
+	queryType, _ := reflectType.FieldByName(field)
 	queryFilter := queryType.Tag.Get("filter")
 	sql = c.querySQL(caller+1, modelValue.Addr().Interface(), queryFilter)
 	sql, args = c.joinWhereUnify(caller+1, sql, nil, v)
@@ -928,6 +997,10 @@ func (c *CRUD) destSet(value reflect.Value, filter string, dests ...interface{})
 		}
 		targetValue := reflect.Indirect(value)
 		targetType := targetValue.Type()
+		if targetType.Kind() != reflect.Struct {
+			e = fmt.Errorf("field %v is not struct", key)
+			return
+		}
 		k := targetValue.NumField()
 		for i := 0; i < k; i++ {
 			field := targetType.Field(i)
@@ -953,13 +1026,13 @@ func (c *CRUD) destSet(value reflect.Value, filter string, dests ...interface{})
 			destValue.Set(value)
 			continue
 		}
-		if value.Kind() == reflect.Ptr {
-			indirectValue := reflect.Indirect(value)
-			if destType == indirectValue.Type() {
-				destValue.Set(indirectValue)
-				continue
-			}
-		}
+		// if value.Kind() == reflect.Ptr && !value.IsZero() {
+		// 	indirectValue := reflect.Indirect(value)
+		// 	if destType == indirectValue.Type() {
+		// 		destValue.Set(indirectValue)
+		// 		continue
+		// 	}
+		// }
 		switch destKind {
 		case reflect.Func:
 			destValue.Call([]reflect.Value{value})
@@ -1068,13 +1141,14 @@ func Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err err
 
 func (c *CRUD) Scan(rows Rows, v interface{}, filter string, dest ...interface{}) (err error) {
 	isPtr := reflect.ValueOf(v).Kind() == reflect.Ptr
+	isStruct := reflect.Indirect(reflect.ValueOf(v)).Kind() == reflect.Struct
 	for rows.Next() {
 		value := NewValue(v)
 		err = rows.Scan(c.ScanArgs(value.Interface(), filter)...)
 		if err != nil {
 			break
 		}
-		if !isPtr {
+		if !isPtr || !isStruct {
 			value = reflect.Indirect(value)
 		}
 		err = c.destSet(value, filter, dest...)
@@ -1096,18 +1170,18 @@ func (c *CRUD) ScanUnify(rows Rows, v interface{}) (err error) {
 	return
 }
 
-func Query(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	err = Default.query(1, queryer, v, filter, sql, args, dest...)
+func Query(queryer interface{}, ctx context.Context, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.query(1, queryer, ctx, v, filter, sql, args, dest...)
 	return
 }
 
-func (c *CRUD) Query(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.query(1, queryer, v, filter, sql, args, dest...)
+func (c *CRUD) Query(queryer interface{}, ctx context.Context, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = c.query(1, queryer, ctx, v, filter, sql, args, dest...)
 	return
 }
 
-func (c *CRUD) query(caller int, queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	rows, err := c.queryerQuery(queryer, sql, args)
+func (c *CRUD) query(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	rows, err := c.queryerQuery(queryer, ctx, sql, args)
 	if err != nil {
 		if c.Verbose {
 			c.Log(caller, "CRUD query by struct:%v,filter:%v,sql:%v,args:%v result is fail:%v", reflect.TypeOf(v), filter, sql, jsonString(args), err)
@@ -1122,55 +1196,55 @@ func (c *CRUD) query(caller int, queryer, v interface{}, filter, sql string, arg
 	return
 }
 
-func QueryFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
-	err = Default.queryFilter(1, queryer, v, filter, where, sep, args, orderby, offset, limit, dest...)
+func QueryFilter(queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
+	err = Default.queryFilter(1, queryer, ctx, v, filter, where, sep, args, orderby, offset, limit, dest...)
 	return
 }
 
-func (c *CRUD) QueryFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
-	err = c.queryFilter(1, queryer, v, filter, where, sep, args, orderby, offset, limit, dest...)
+func (c *CRUD) QueryFilter(queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
+	err = c.queryFilter(1, queryer, ctx, v, filter, where, sep, args, orderby, offset, limit, dest...)
 	return
 }
 
-func (c *CRUD) queryFilter(caller int, queryer, v interface{}, filter string, where []string, sep string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
+func (c *CRUD) queryFilter(caller int, queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
 	sql := c.querySQL(caller+1, v, filter)
 	sql = c.joinWhere(caller+1, sql, where, sep)
 	sql = c.joinPage(caller+1, sql, orderby, offset, limit)
-	err = c.query(caller+1, queryer, v, filter, sql, args, dest...)
+	err = c.query(caller+1, queryer, ctx, v, filter, sql, args, dest...)
 	return
 }
 
-func QueryWheref(queryer, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
-	err = Default.queryWheref(1, queryer, v, filter, formats, args, offset, limit, dest...)
+func QueryWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
+	err = Default.queryWheref(1, queryer, ctx, v, filter, formats, args, offset, limit, dest...)
 	return
 }
 
-func (c *CRUD) QueryWheref(queryer, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
-	err = c.queryWheref(1, queryer, v, filter, formats, args, offset, limit, dest...)
+func (c *CRUD) QueryWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
+	err = c.queryWheref(1, queryer, ctx, v, filter, formats, args, offset, limit, dest...)
 	return
 }
 
-func (c *CRUD) queryWheref(caller int, queryer, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
+func (c *CRUD) queryWheref(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
 	sql := c.querySQL(caller+1, v, filter)
 	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
 	sql = c.joinPage(caller+1, sql, "", offset, limit)
-	err = c.query(caller+1, queryer, v, filter, sql, sqlArgs, dest...)
+	err = c.query(caller+1, queryer, ctx, v, filter, sql, sqlArgs, dest...)
 	return
 }
 
-func QueryUnify(queryer, v interface{}) (err error) {
-	err = Default.queryUnify(1, queryer, v)
+func QueryUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
+	err = Default.queryUnify(1, queryer, ctx, v)
 	return
 }
 
-func (c *CRUD) QueryUnify(queryer, v interface{}) (err error) {
-	err = c.queryUnify(1, queryer, v)
+func (c *CRUD) QueryUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
+	err = c.queryUnify(1, queryer, ctx, v)
 	return
 }
 
-func (c *CRUD) queryUnify(caller int, queryer, v interface{}) (err error) {
-	sql, args := c.queryUnifySQL(caller+1, v)
-	rows, err := c.queryerQuery(queryer, sql, args)
+func (c *CRUD) queryUnify(caller int, queryer interface{}, ctx context.Context, v interface{}) (err error) {
+	sql, args := c.queryUnifySQL(caller+1, v, "Query")
+	rows, err := c.queryerQuery(queryer, ctx, sql, args)
 	if err != nil {
 		if c.Verbose {
 			c.Log(caller, "CRUD query unify by struct:%v,sql:%v,args:%v result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
@@ -1192,12 +1266,13 @@ func ScanRow(row Row, v interface{}, filter string, dest ...interface{}) (err er
 
 func (c *CRUD) ScanRow(row Row, v interface{}, filter string, dest ...interface{}) (err error) {
 	isPtr := reflect.ValueOf(v).Kind() == reflect.Ptr
+	isStruct := reflect.Indirect(reflect.ValueOf(v)).Kind() == reflect.Struct
 	value := NewValue(v)
 	err = row.Scan(c.ScanArgs(value.Interface(), filter)...)
 	if err != nil {
 		return
 	}
-	if !isPtr {
+	if !isPtr || !isStruct {
 		value = reflect.Indirect(value)
 	}
 	err = c.destSet(value, filter, dest...)
@@ -1218,18 +1293,18 @@ func (c *CRUD) ScanUnifyRow(row Row, v interface{}) (err error) {
 	return
 }
 
-func QueryRow(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	err = Default.queryRow(1, queryer, v, filter, sql, args, dest...)
+func QueryRow(queryer interface{}, ctx context.Context, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.queryRow(1, queryer, ctx, v, filter, sql, args, dest...)
 	return
 }
 
-func (c *CRUD) QueryRow(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.queryRow(1, queryer, v, filter, sql, args, dest...)
+func (c *CRUD) QueryRow(queryer interface{}, ctx context.Context, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = c.queryRow(1, queryer, ctx, v, filter, sql, args, dest...)
 	return
 }
 
-func (c *CRUD) queryRow(caller int, queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.ScanRow(c.queryerQueryRow(queryer, sql, args), v, filter, dest...)
+func (c *CRUD) queryRow(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = c.ScanRow(c.queryerQueryRow(queryer, ctx, sql, args), v, filter, dest...)
 	if err != nil {
 		if c.Verbose {
 			c.Log(caller, "CRUD query by struct:%v,filter:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, jsonString(args), err)
@@ -1242,53 +1317,53 @@ func (c *CRUD) queryRow(caller int, queryer, v interface{}, filter, sql string, 
 	return
 }
 
-func QueryFilterRow(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
-	err = Default.queryFilterRow(1, queryer, v, filter, where, sep, args, dest...)
+func QueryFilterRow(queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.queryFilterRow(1, queryer, ctx, v, filter, where, sep, args, dest...)
 	return
 }
 
-func (c *CRUD) QueryFilterRow(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.queryFilterRow(1, queryer, v, filter, where, sep, args, dest...)
+func (c *CRUD) QueryFilterRow(queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
+	err = c.queryFilterRow(1, queryer, ctx, v, filter, where, sep, args, dest...)
 	return
 }
 
-func (c *CRUD) queryFilterRow(caller int, queryer, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
+func (c *CRUD) queryFilterRow(caller int, queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
 	sql := c.querySQL(caller+1, v, filter)
 	sql = c.joinWhere(caller+1, sql, where, sep)
-	err = c.queryRow(caller+1, queryer, v, filter, sql, args, dest...)
+	err = c.queryRow(caller+1, queryer, ctx, v, filter, sql, args, dest...)
 	return
 }
 
-func QueryRowWheref(queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
-	err = Default.queryRowWheref(1, queryer, v, filter, formats, args, dest...)
+func QueryRowWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.queryRowWheref(1, queryer, ctx, v, filter, formats, args, dest...)
 	return
 }
 
-func (c *CRUD) QueryRowWheref(queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.queryRowWheref(1, queryer, v, filter, formats, args, dest...)
+func (c *CRUD) QueryRowWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
+	err = c.queryRowWheref(1, queryer, ctx, v, filter, formats, args, dest...)
 	return
 }
 
-func (c *CRUD) queryRowWheref(caller int, queryer, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
+func (c *CRUD) queryRowWheref(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
 	sql := c.querySQL(caller+1, v, filter)
 	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
-	err = c.queryRow(caller+1, queryer, v, filter, sql, sqlArgs, dest...)
+	err = c.queryRow(caller+1, queryer, ctx, v, filter, sql, sqlArgs, dest...)
 	return
 }
 
-func QueryUnifyRow(queryer, v interface{}) (err error) {
-	err = Default.queryUnifyRow(1, queryer, v)
+func QueryUnifyRow(queryer interface{}, ctx context.Context, v interface{}) (err error) {
+	err = Default.queryUnifyRow(1, queryer, ctx, v)
 	return
 }
 
-func (c *CRUD) QueryUnifyRow(queryer, v interface{}) (err error) {
-	err = c.queryUnifyRow(1, queryer, v)
+func (c *CRUD) QueryUnifyRow(queryer interface{}, ctx context.Context, v interface{}) (err error) {
+	err = c.queryUnifyRow(1, queryer, ctx, v)
 	return
 }
 
-func (c *CRUD) queryUnifyRow(caller int, queryer, v interface{}) (err error) {
-	sql, args := c.queryUnifySQL(caller+1, v)
-	err = c.ScanUnifyRow(c.queryerQueryRow(queryer, sql, args), v)
+func (c *CRUD) queryUnifyRow(caller int, queryer interface{}, ctx context.Context, v interface{}) (err error) {
+	sql, args := c.queryUnifySQL(caller+1, v, "QueryRow")
+	err = c.ScanUnifyRow(c.queryerQueryRow(queryer, ctx, sql, args), v)
 	if err != nil {
 		if c.Verbose {
 			c.Log(caller, "CRUD query unify row by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
@@ -1381,18 +1456,18 @@ func (c *CRUD) CountUnifyDest(v interface{}) (modelValue interface{}, queryFilte
 	return
 }
 
-func Count(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	err = Default.count(1, queryer, v, filter, sql, args, dest...)
+func Count(queryer interface{}, ctx context.Context, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = Default.count(1, queryer, ctx, v, filter, sql, args, dest...)
 	return
 }
 
-func (c *CRUD) Count(queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.count(1, queryer, v, filter, sql, args, dest...)
+func (c *CRUD) Count(queryer interface{}, ctx context.Context, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = c.count(1, queryer, ctx, v, filter, sql, args, dest...)
 	return
 }
 
-func (c *CRUD) count(caller int, queryer, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
-	err = c.ScanRow(c.queryerQueryRow(queryer, sql, args), v, filter, dest...)
+func (c *CRUD) count(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, sql string, args []interface{}, dest ...interface{}) (err error) {
+	err = c.ScanRow(c.queryerQueryRow(queryer, ctx, sql, args), v, filter, dest...)
 	if err != nil {
 		if c.Verbose {
 			c.Log(caller, "CRUD count by struct:%v,filter:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), filter, sql, jsonString(args), err)
@@ -1405,57 +1480,57 @@ func (c *CRUD) count(caller int, queryer, v interface{}, filter, sql string, arg
 	return
 }
 
-func CountFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, suffix string, dest ...interface{}) (err error) {
-	err = Default.countFilter(1, queryer, v, filter, where, sep, args, suffix, dest...)
+func CountFilter(queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, suffix string, dest ...interface{}) (err error) {
+	err = Default.countFilter(1, queryer, ctx, v, filter, where, sep, args, suffix, dest...)
 	return
 }
 
-func (c *CRUD) CountFilter(queryer, v interface{}, filter string, where []string, sep string, args []interface{}, suffix string, dest ...interface{}) (err error) {
-	err = c.countFilter(1, queryer, v, filter, where, sep, args, suffix, dest...)
+func (c *CRUD) CountFilter(queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, suffix string, dest ...interface{}) (err error) {
+	err = c.countFilter(1, queryer, ctx, v, filter, where, sep, args, suffix, dest...)
 	return
 }
 
-func (c *CRUD) countFilter(caller int, queryer, v interface{}, filter string, where []string, sep string, args []interface{}, suffix string, dest ...interface{}) (err error) {
+func (c *CRUD) countFilter(caller int, queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, suffix string, dest ...interface{}) (err error) {
 	sql := c.countSQL(caller+1, v, filter)
 	sql = c.joinWhere(caller+1, sql, where, sep, suffix)
-	err = c.count(caller+1, queryer, v, filter, sql, args, dest...)
+	err = c.count(caller+1, queryer, ctx, v, filter, sql, args, dest...)
 	return
 }
 
-func CountWheref(queryer, v interface{}, filter, formats string, args []interface{}, suffix string, dest ...interface{}) (err error) {
-	err = Default.countWheref(1, queryer, v, filter, formats, args, suffix, dest...)
+func CountWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, suffix string, dest ...interface{}) (err error) {
+	err = Default.countWheref(1, queryer, ctx, v, filter, formats, args, suffix, dest...)
 	return
 }
 
-func (c *CRUD) CountWheref(queryer, v interface{}, filter, formats string, args []interface{}, suffix string, dest ...interface{}) (err error) {
-	err = c.countWheref(1, queryer, v, filter, formats, args, suffix, dest...)
+func (c *CRUD) CountWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, suffix string, dest ...interface{}) (err error) {
+	err = c.countWheref(1, queryer, ctx, v, filter, formats, args, suffix, dest...)
 	return
 }
 
-func (c *CRUD) countWheref(caller int, queryer, v interface{}, filter, formats string, args []interface{}, suffix string, dest ...interface{}) (err error) {
+func (c *CRUD) countWheref(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, suffix string, dest ...interface{}) (err error) {
 	sql := c.countSQL(caller+1, v, filter)
 	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
 	if len(suffix) > 0 {
 		sql += " " + suffix
 	}
-	err = c.count(caller+1, queryer, v, filter, sql, sqlArgs, dest...)
+	err = c.count(caller+1, queryer, ctx, v, filter, sql, sqlArgs, dest...)
 	return
 }
 
-func CountUnify(queryer, v interface{}) (err error) {
-	err = Default.countUnify(1, queryer, v)
+func CountUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
+	err = Default.countUnify(1, queryer, ctx, v)
 	return
 }
 
-func (c *CRUD) CountUnify(queryer, v interface{}) (err error) {
-	err = c.countUnify(1, queryer, v)
+func (c *CRUD) CountUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
+	err = c.countUnify(1, queryer, ctx, v)
 	return
 }
 
-func (c *CRUD) countUnify(caller int, queryer, v interface{}) (err error) {
+func (c *CRUD) countUnify(caller int, queryer interface{}, ctx context.Context, v interface{}) (err error) {
 	sql, args := c.countUnifySQL(caller+1, v)
 	modelValue, queryFilter, dests := c.CountUnifyDest(v)
-	err = c.ScanRow(c.queryerQueryRow(queryer, sql, args), modelValue, queryFilter, dests...)
+	err = c.ScanRow(c.queryerQueryRow(queryer, ctx, sql, args), modelValue, queryFilter, dests...)
 	if err != nil {
 		if c.Verbose {
 			c.Log(caller, "CRUD count unify by struct:%v,sql:%v,args:%v, result is fail:%v", reflect.TypeOf(v), sql, jsonString(args), err)
@@ -1468,34 +1543,34 @@ func (c *CRUD) countUnify(caller int, queryer, v interface{}) (err error) {
 	return
 }
 
-func ApplyUnify(queryer, v interface{}) (err error) {
-	err = Default.applyUnify(1, queryer, v)
+func ApplyUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
+	err = Default.applyUnify(1, queryer, ctx, v)
 	return
 }
 
-func (c *CRUD) ApplyUnify(queryer, v interface{}) (err error) {
-	err = c.applyUnify(1, queryer, v)
+func (c *CRUD) ApplyUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
+	err = c.applyUnify(1, queryer, ctx, v)
 	return
 }
 
-func (c *CRUD) applyUnify(caller int, queryer, v interface{}) (err error) {
+func (c *CRUD) applyUnify(caller int, queryer interface{}, ctx context.Context, v interface{}) (err error) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	if value := reflectValue.FieldByName("Query"); value.IsValid() && err == nil {
 		enabled := value.FieldByName("Enabled")
 		if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
-			err = c.queryUnify(caller+1, queryer, v)
+			err = c.queryUnify(caller+1, queryer, ctx, v)
 		}
 	}
 	if value := reflectValue.FieldByName("QueryRow"); value.IsValid() && err == nil {
 		enabled := value.FieldByName("Enabled")
 		if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
-			err = c.queryUnifyRow(caller+1, queryer, v)
+			err = c.queryUnifyRow(caller+1, queryer, ctx, v)
 		}
 	}
 	if value := reflectValue.FieldByName("Count"); value.IsValid() && err == nil {
 		enabled := value.FieldByName("Enabled")
 		if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
-			err = c.countUnify(caller+1, queryer, v)
+			err = c.countUnify(caller+1, queryer, ctx, v)
 		}
 	}
 	return
