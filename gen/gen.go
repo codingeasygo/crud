@@ -273,9 +273,13 @@ type AutoGen struct {
 	NameConv      NameConv
 	Out           string
 	OutPackage    string
+	OutStructPre  string
 	OutStructFile string
+	OutDefinePre  string
 	OutDefineFile string
+	OutFuncPre    string
 	OutFuncFile   string
+	OutTestPre    string
 	OutTestFile   string
 }
 
@@ -548,6 +552,56 @@ func (g *AutoGen) Generate() (err error) {
 	if len(g.OutPackage) < 1 {
 		g.OutPackage = "autogen"
 	}
+	if len(g.OutStructPre) < 1 {
+		g.OutStructPre = `
+			//auto gen models by autogen
+			package %v
+			import (
+				"github.com/codingeasygo/util/xsql"
+				"github.com/shopspring/decimal"
+			)
+		`
+	}
+	if len(g.OutDefinePre) < 1 {
+		g.OutDefinePre = `
+			//auto gen func by autogen
+			package %v
+		`
+	}
+	if len(g.OutFuncPre) < 1 {
+		g.OutFuncPre = `
+			//auto gen func by autogen
+			package %v
+			import (
+				"reflect"
+				"context"
+				"fmt"
+
+				"github.com/codingeasygo/crud"
+				"github.com/codingeasygo/util/attrvalid"
+				"github.com/codingeasygo/util/converter"
+				"github.com/codingeasygo/util/xsql"
+			)
+
+			var GetQueryer interface{} = func() crud.Queryer {
+				panic("get crud queryer is not setted")
+			}
+		`
+	}
+	if len(g.OutTestPre) < 1 {
+		g.OutTestPre = `
+			//auto gen func by autogen
+			package %v
+			import (
+				"context"
+				"fmt"
+				"strings"
+				"testing"
+
+				"github.com/codingeasygo/crud"
+			)
+		`
+	}
 	allTables, err := Query(g.Queryer, g.TableSQL, g.ColumnSQL, g.Schema)
 	if err != nil {
 		return
@@ -572,14 +626,7 @@ func (g *AutoGen) Generate() (err error) {
 		generator.NameConv = g.NameConv
 		generator.OnPre = g.OnPre
 		buffer := bytes.NewBuffer(nil)
-		fmt.Fprintf(buffer, `
-			//auto gen models by autogen
-			package %v
-			import (
-				"github.com/codingeasygo/util/xsql"
-				"github.com/shopspring/decimal"
-			)
-		`, g.OutPackage)
+		fmt.Fprintf(buffer, g.OutStructPre, g.OutPackage)
 		err = generator.GenerateByTemplate("mod", StructTmpl, buffer)
 		if err != nil {
 			return
@@ -604,10 +651,7 @@ func (g *AutoGen) Generate() (err error) {
 		generator.NameConv = g.NameConv
 		generator.OnPre = g.OnPre
 		buffer := bytes.NewBuffer(nil)
-		fmt.Fprintf(buffer, `
-			//auto gen func by autogen
-			package %v
-		`, g.OutPackage)
+		fmt.Fprintf(buffer, g.OutDefinePre, g.OutPackage)
 		err = generator.GenerateByTemplate("fields", DefineTmpl, buffer)
 		if err != nil {
 			return
@@ -632,24 +676,7 @@ func (g *AutoGen) Generate() (err error) {
 		generator.NameConv = g.NameConv
 		generator.OnPre = g.OnPre
 		buffer := bytes.NewBuffer(nil)
-		fmt.Fprintf(buffer, `
-			//auto gen func by autogen
-			package %v
-			import (
-				"reflect"
-				"context"
-				"fmt"
-
-				"github.com/codingeasygo/crud"
-				"github.com/codingeasygo/util/attrvalid"
-				"github.com/codingeasygo/util/converter"
-				"github.com/codingeasygo/util/xsql"
-			)
-
-			var GetQueryer interface{} = func() crud.Queryer {
-				panic("get crud queryer is not setted")
-			}
-		`, g.OutPackage)
+		fmt.Fprintf(buffer, g.OutFuncPre, g.OutPackage)
 		err = generator.GenerateByTemplate("func", StructFuncTmpl, buffer)
 		if err != nil {
 			return
@@ -674,18 +701,7 @@ func (g *AutoGen) Generate() (err error) {
 		generator.NameConv = g.NameConv
 		generator.OnPre = g.OnPre
 		buffer := bytes.NewBuffer(nil)
-		fmt.Fprintf(buffer, `
-			//auto gen func by autogen
-			package %v
-			import (
-				"context"
-				"fmt"
-				"strings"
-				"testing"
-
-				"github.com/codingeasygo/crud"
-			)
-		`, g.OutPackage)
+		fmt.Fprintf(buffer, g.OutTestPre, g.OutPackage)
 		err = generator.GenerateByTemplate("test", StructTestTmpl, buffer)
 		if err != nil {
 			return
