@@ -13,7 +13,7 @@ order by name asc
 `
 
 const ColumnSQLSQLITE = `
-select name,type,pk,"notnull",dflt_value,cid,type,'' from pragma_table_info('crud_object')
+select name,type,pk,"notnull",dflt_value,cid,type,'' from pragma_table_info($1)
 `
 
 var TypeMapSQLITE = map[string][]string{
