@@ -259,10 +259,12 @@ const (
 type AutoGen struct {
 	TypeField     map[string]map[string]string
 	FieldFilter   map[string]map[string]string
-	CodeInit      map[string]string
+	CodeAddInit   map[string]string
+	CodeTestInit  map[string]string
 	CodeSlice     map[string]string
 	Comments      map[string]map[string]string
 	TableGenAdd   xsql.StringArray
+	TableRetAdd   map[string]string
 	TableInclude  xsql.StringArray
 	TableExclude  xsql.StringArray
 	Queryer       interface{}
@@ -271,6 +273,7 @@ type AutoGen struct {
 	Schema        string
 	TypeMap       map[string][]string
 	NameConv      NameConv
+	GetQueryer    string
 	Out           string
 	OutPackage    string
 	OutStructPre  string
@@ -285,13 +288,12 @@ type AutoGen struct {
 
 func (g *AutoGen) FuncMap() (funcs template.FuncMap) {
 	return template.FuncMap{
-		"JoinShowOption":     g.JoinShowOption,
-		"PrimaryFieldName":   g.PrimaryFieldName,
-		"PrimaryFieldColumn": g.PrimaryFieldColumn,
-		"FieldZero":          g.FieldZero,
-		"FieldType":          g.FieldType,
-		"FieldTags":          g.FieldTags,
-		"FieldDefineType":    g.FieldDefineType,
+		"JoinShowOption":  g.JoinShowOption,
+		"PrimaryField":    g.PrimaryField,
+		"FieldZero":       g.FieldZero,
+		"FieldType":       g.FieldType,
+		"FieldTags":       g.FieldTags,
+		"FieldDefineType": g.FieldDefineType,
 	}
 }
 
@@ -306,19 +308,22 @@ func (g *AutoGen) JoinShowOption(options []*Option, key, seq string) string {
 	return strings.Join(values, seq)
 }
 
-func (g *AutoGen) PrimaryFieldName(s *Struct) string {
+func (g *AutoGen) PrimaryField(s *Struct, key string) string {
 	for _, f := range s.Fields {
-		if f.Column.IsPK {
-			return f.Name
+		if !f.Column.IsPK {
+			continue
 		}
-	}
-	return ""
-}
-
-func (g *AutoGen) PrimaryFieldColumn(s *Struct) string {
-	for _, f := range s.Fields {
-		if f.Column.IsPK {
+		switch key {
+		case "Name":
+			return f.Name
+		case "Type":
+			return f.Type
+		case "TypeArray":
+			return fmt.Sprintf("xsql.%vArray", strings.Title(f.Type))
+		case "Column":
 			return f.Column.Name
+		default:
+			return ""
 		}
 	}
 	return ""
@@ -409,11 +414,17 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 	if g.FieldFilter == nil {
 		g.FieldFilter = map[string]map[string]string{}
 	}
-	if g.CodeInit == nil {
-		g.CodeInit = map[string]string{}
+	if g.CodeAddInit == nil {
+		g.CodeAddInit = map[string]string{}
+	}
+	if g.CodeTestInit == nil {
+		g.CodeTestInit = map[string]string{}
 	}
 	if g.Comments == nil {
 		g.Comments = map[string]map[string]string{}
+	}
+	if g.TableRetAdd == nil {
+		g.TableRetAdd = map[string]string{}
 	}
 	if g.TableGenAdd == nil {
 		g.TableGenAdd = xsql.StringArray{}
@@ -436,8 +447,9 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 	}
 	s := gen.AsStruct(table)
 	result := map[string]interface{}{
-		"Struct": s,
-		"Code":   g.CodeSlice,
+		"Struct":     s,
+		"Code":       g.CodeSlice,
+		"GetQueryer": g.GetQueryer,
 	}
 	fieldOptional := ""
 	fieldRequired := ""
@@ -517,15 +529,34 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 				`, arg, field.Name, arg, field.Name, typ)
 			}
 		}
-		if code, ok := g.CodeInit[s.Table.Name]; ok {
+		if code, ok := g.CodeAddInit[s.Table.Name]; ok {
 			defaults += strings.ReplaceAll(code, "ARG.", arg+".")
+		}
+		addFilter := fmt.Sprintf("^%v#all", g.PrimaryField(s, "Column"))
+		addReturn := fmt.Sprintf("%v#all", g.PrimaryField(s, "Column"))
+		if column, ok := g.TableRetAdd[s.Table.Name]; ok {
+			if len(column) > 0 {
+				addFilter = fmt.Sprintf("^%v#all", column)
+				addReturn = fmt.Sprintf("%v#all", column)
+			} else {
+				addFilter = "#all"
+				addReturn = ""
+			}
 		}
 		result["Add"] = map[string]interface{}{
 			"Defaults": defaults,
-			"Filter":   "^tid#all",
-			"Return":   "tid#all",
-			"Scan":     fmt.Sprintf(`&%v.TID`, arg),
+			"Filter":   addFilter,
+			"Return":   addReturn,
 			"Normal":   g.TableGenAdd.HavingOne(table.Name),
+		}
+	}
+	{
+		defaults := ""
+		if code, ok := g.CodeTestInit[s.Table.Name]; ok {
+			defaults += strings.ReplaceAll(code, "ARG.", arg+".")
+		}
+		result["Test"] = map[string]interface{}{
+			"Defaults": defaults,
 		}
 	}
 	{
@@ -582,11 +613,14 @@ func (g *AutoGen) Generate() (err error) {
 				"github.com/codingeasygo/util/converter"
 				"github.com/codingeasygo/util/xsql"
 			)
-
-			var GetQueryer interface{} = func() crud.Queryer {
-				panic("get crud queryer is not setted")
-			}
 		`
+		if len(g.GetQueryer) > 0 {
+			g.OutFuncPre += fmt.Sprintf(`
+				var %v interface{} = func() crud.Queryer {
+					panic("get crud queryer is not setted")
+				}
+			`, g.GetQueryer)
+		}
 	}
 	if len(g.OutTestPre) < 1 {
 		g.OutTestPre = `
@@ -595,12 +629,20 @@ func (g *AutoGen) Generate() (err error) {
 			import (
 				"context"
 				"fmt"
+				"reflect"
 				"strings"
 				"testing"
 
 				"github.com/codingeasygo/crud"
 			)
 		`
+		if len(g.GetQueryer) < 1 {
+			g.OutFuncPre += fmt.Sprintf(`
+				var %v interface{} = func() crud.Queryer {
+					panic("get crud queryer is not setted")
+				}
+			`, "GetQueryer")
+		}
 	}
 	allTables, err := Query(g.Queryer, g.TableSQL, g.ColumnSQL, g.Schema)
 	if err != nil {

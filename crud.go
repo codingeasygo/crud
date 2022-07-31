@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/codingeasygo/util/attrscan"
+	"github.com/codingeasygo/util/xsql"
 )
 
 type NilChecker interface {
@@ -26,6 +27,22 @@ func jsonString(v interface{}) string {
 		return err.Error()
 	}
 	return string(data)
+}
+
+func BuildOrderby(supported string, order string) (orderby string) {
+	if len(order) > 0 {
+		orderAsc := order[0:1]
+		orderKey := order[1:]
+		if xsql.AsStringArray(supported).HavingOne(orderKey) {
+			orderby = "order by " + orderKey
+		}
+		if len(orderby) > 0 && orderAsc == "+" {
+			orderby += " asc"
+		} else if len(orderby) > 0 && orderAsc == "-" {
+			orderby += " desc"
+		}
+	}
+	return
 }
 
 func NewValue(v interface{}) (value reflect.Value) {
@@ -260,6 +277,9 @@ func (c *CRUD) FilterWhere(args []interface{}, v interface{}, filter string) (wh
 			return
 		}
 		cmp := field.Tag.Get("cmp")
+		if cmp == "-" {
+			return
+		}
 		if len(cmp) < 1 {
 			cmp = fieldName + " = " + c.ArgFormat
 		}
@@ -465,11 +485,8 @@ func (c *CRUD) joinPage(caller int, sql, orderby string, offset, limit int) (sql
 	if len(orderby) > 0 && (offset >= 0 || limit > 0) {
 		sql_ += " " + orderby
 	}
-	if offset >= 0 {
-		sql_ += fmt.Sprintf(" offset %v", offset)
-	}
 	if limit > 0 {
-		sql_ += fmt.Sprintf(" limit %v", limit)
+		sql_ += fmt.Sprintf(" limit %v offset %v", limit, offset)
 	}
 	if c.Verbose {
 		c.Log(caller, "CRUD join page done with sql:%v", sql_)
@@ -619,7 +636,19 @@ func (c *CRUD) insertFilter(caller int, queryer interface{}, ctx context.Context
 	table, fields, param, args := c.insertArgs(caller+1, v, filter)
 	sql := fmt.Sprintf(`insert into %v(%v) values(%v)`, table, strings.Join(fields, ","), strings.Join(param, ","))
 	if len(scan) < 1 {
+		if len(join) > 0 {
+			sql += " " + join
+		}
 		insertId, _, err = c.queryerExec(queryer, ctx, sql, args)
+		if err != nil {
+			if c.Verbose {
+				c.Log(caller, "CRUD insert filter by struct:%v,sql:%v, result is fail:%v", reflect.TypeOf(v), sql, err)
+			}
+		} else {
+			if c.Verbose {
+				c.Log(caller, "CRUD insert filter by struct:%v,sql:%v, result is success", reflect.TypeOf(v), sql)
+			}
+		}
 		return
 	}
 	_, scanFields := c.queryField(caller+1, v, scan)

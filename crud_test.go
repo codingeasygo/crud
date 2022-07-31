@@ -43,6 +43,21 @@ func TestJsonString(t *testing.T) {
 	jsonString(t.Error)
 }
 
+func TestBuildOrderby(t *testing.T) {
+	if v := BuildOrderby("x", "+y"); len(v) > 0 {
+		t.Error("error")
+		return
+	}
+	if v := BuildOrderby("x", "+x"); v != "order by x asc" {
+		t.Error(v)
+		return
+	}
+	if v := BuildOrderby("x", "-x"); v != "order by x desc" {
+		t.Error(v)
+		return
+	}
+}
+
 func TestQueryCall(t *testing.T) {
 	clearPG()
 	testQueryCall(t, getPG())
@@ -603,6 +618,11 @@ func testInsert(t *testing.T, queryer Queryer) {
 		object := newTestObject()
 		object.TID = 0
 		_, err = InsertFilter(queryer, context.Background(), object, "^tid#all", "xxxx", "tid#all")
+		if err == nil {
+			t.Error(err)
+			return
+		}
+		_, err = InsertFilter(queryer, context.Background(), object, "", "xx xx", "")
 		if err == nil {
 			t.Error(err)
 			return
@@ -1328,6 +1348,26 @@ func testQuery(t *testing.T, queryer Queryer) {
 			return
 		}
 	}
+	{
+		var idResult int64
+		err = QueryRowWheref(queryer, context.Background(), MetaWith(object, int64(0)), "tid#all", "tid=$%v", []interface{}{object.TID}, &idResult, "tid")
+		if err != nil || idResult < 1 {
+			t.Errorf("%v,%v", err, idResult)
+			return
+		}
+		var stringResult string
+		err = QueryRowWheref(queryer, context.Background(), MetaWith(object, string("")), "string_value#all", "tid=$%v", []interface{}{object.TID}, &stringResult, "string_value")
+		if err != nil || len(stringResult) < 1 {
+			t.Errorf("%v,%v", err, stringResult)
+			return
+		}
+		var stringPtrResult *string
+		err = QueryRowWheref(queryer, context.Background(), MetaWith(object, converter.StringPtr("")), "string_ptr#all", "tid=$%v", []interface{}{object.TID}, &stringPtrResult, "string_ptr")
+		if err != nil || stringPtrResult == nil {
+			t.Errorf("%v,%v", err, stringPtrResult)
+			return
+		}
+	}
 	{ //alias
 		var idList []int64
 		err = Query(queryer, context.Background(), MetaWith(object, int64(0)), "o.tid#all", "select o.tid from crud_object o", nil, &idList, "tid")
@@ -1584,6 +1624,7 @@ type SearchCrudObjectUnify struct {
 			Data  string `json:"data" cmp:"data::text like $%v"`
 		} `json:"key" join:"or"`
 		Status CrudObjectStatusArray `json:"status" cmp:"status=any($%v)"`
+		Ignore int                   `json:"ignore" cmp:"-" filter:"#all"`
 	} `json:"where" join:"and"`
 	Page struct {
 		Order  string `json:"order" default:"order by tid desc"`
@@ -1609,6 +1650,7 @@ type FindCrudObjectUnify struct {
 		Type   CrudObjectType        `json:"type" filter:"#all"`
 		Key    string                `json:"key" cmp:"title like $%v or data::text like $%v"`
 		Status CrudObjectStatusArray `json:"status" cmp:"status=any($%v)"`
+		Ignore int                   `json:"ignore" cmp:"-" filter:"#all"`
 		Empty  int                   `json:"empty"`
 	} `json:"where" join:"and"`
 	QueryRow struct {

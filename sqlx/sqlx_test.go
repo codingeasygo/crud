@@ -109,7 +109,7 @@ var PgGen = gen.AutoGen{
 			gen.FieldsOrder: "type,update_time,create_time",
 		},
 	},
-	CodeInit: map[string]string{
+	CodeAddInit: map[string]string{
 		"crud_object": `
 			if ARG.Level < 1 {
 				ARG.Level = 1

@@ -121,7 +121,7 @@ var PgGen = AutoGen{
 			FieldsOrder: "type,update_time,create_time",
 		},
 	},
-	CodeInit: map[string]string{
+	CodeAddInit: map[string]string{
 		"crud_object": `
 			if ARG.Level < 1 {
 				ARG.Level = 1
@@ -140,6 +140,7 @@ var PgGen = AutoGen{
 	Schema:       "public",
 	TypeMap:      TypeMapPG,
 	NameConv:     nameConv,
+	GetQueryer:   "GetQueryer",
 	Out:          "./autogen/",
 	OutPackage:   "autogen",
 }
@@ -250,7 +251,7 @@ var SqliteGen = AutoGen{
 			FieldsOrder: "type,update_time,create_time",
 		},
 	},
-	CodeInit: map[string]string{
+	CodeAddInit: map[string]string{
 		"crud_object": `
 			if ARG.Level < 1 {
 				ARG.Level = 1
@@ -275,6 +276,7 @@ var SqliteGen = AutoGen{
 	Schema:       "",
 	TypeMap:      TypeMapSQLITE,
 	NameConv:     nameConv,
+	GetQueryer:   "GetQueryer",
 	Out:          "./autogen/",
 	OutPackage:   "autogen",
 }
