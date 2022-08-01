@@ -752,7 +752,7 @@ func testUpdate(t *testing.T, queryer Queryer) {
 			t.Error(err)
 			return
 		}
-		err = UpdateSetRow(queryer, context.Background(), object, sets, where, "and", args)
+		err = UpdateRowSet(queryer, context.Background(), object, sets, where, "and", args)
 		if err != nil {
 			t.Error(err)
 			return
@@ -773,7 +773,7 @@ func testUpdate(t *testing.T, queryer Queryer) {
 			t.Error(err)
 			return
 		}
-		err = Default.UpdateSetRow(queryer, context.Background(), object, sets, where, "and", args)
+		err = Default.UpdateRowSet(queryer, context.Background(), object, sets, where, "and", args)
 		if err != nil {
 			t.Error(err)
 			return
@@ -794,13 +794,13 @@ func testUpdate(t *testing.T, queryer Queryer) {
 			return
 		}
 		object.UpdateTime = xsql.TimeNow()
-		err = UpdateFilterRow(queryer, context.Background(), object, "title,image,update_time,status", where, "and", args)
+		err = UpdateRowFilter(queryer, context.Background(), object, "title,image,update_time,status", where, "and", args)
 		if err != nil {
 			t.Error(err)
 			return
 		}
 		object.UpdateTime = xsql.TimeNow()
-		err = Default.UpdateFilterRow(queryer, context.Background(), object, "title,image,update_time,status", where, "and", args)
+		err = Default.UpdateRowFilter(queryer, context.Background(), object, "title,image,update_time,status", where, "and", args)
 		if err != nil {
 			t.Error(err)
 			return
@@ -846,7 +846,7 @@ func testUpdate(t *testing.T, queryer Queryer) {
 			t.Error(err)
 			return
 		}
-		err = UpdateSetRow(queryer, context.Background(), object, nil, nil, "", nil)
+		err = UpdateRowSet(queryer, context.Background(), object, nil, nil, "", nil)
 		if err == nil {
 			t.Error(err)
 			return
@@ -861,7 +861,7 @@ func testUpdate(t *testing.T, queryer Queryer) {
 			t.Error(err)
 			return
 		}
-		err = UpdateFilterRow(queryer, context.Background(), object, "xxstatus", nil, "", nil)
+		err = UpdateRowFilter(queryer, context.Background(), object, "xxstatus", nil, "", nil)
 		if err == nil {
 			t.Error(err)
 			return
@@ -873,7 +873,7 @@ func testUpdate(t *testing.T, queryer Queryer) {
 			t.Error(err)
 			return
 		}
-		err = UpdateSetRow(queryer, context.Background(), object, sets, where, "and", args)
+		err = UpdateRowSet(queryer, context.Background(), object, sets, where, "and", args)
 		if err != ErrNoRows {
 			t.Error(err)
 			return
@@ -883,7 +883,7 @@ func testUpdate(t *testing.T, queryer Queryer) {
 			t.Error(err)
 			return
 		}
-		err = UpdateFilterRow(queryer, context.Background(), object, "title,image,update_time,status", []string{"tid=$1"}, "and", []interface{}{-100})
+		err = UpdateRowFilter(queryer, context.Background(), object, "title,image,update_time,status", []string{"tid=$1"}, "and", []interface{}{-100})
 		if err != ErrNoRows {
 			t.Error(err)
 			return
@@ -1057,7 +1057,7 @@ func testQuery(t *testing.T, queryer Queryer) {
 			return
 		}
 		result = nil
-		err = QueryFilterRow(queryer, context.Background(), object, "#all", where, "and", args, &result)
+		err = QueryRowFilter(queryer, context.Background(), object, "#all", where, "and", args, &result)
 		if err != nil || result.TID < 1 {
 			t.Error(err)
 			return
@@ -1075,7 +1075,7 @@ func testQuery(t *testing.T, queryer Queryer) {
 			return
 		}
 		result = nil
-		err = Default.QueryFilterRow(queryer, context.Background(), object, "#all", where, "and", args, &result)
+		err = Default.QueryRowFilter(queryer, context.Background(), object, "#all", where, "and", args, &result)
 		if err != nil || result.TID < 1 {
 			t.Error(err)
 			return
@@ -1441,7 +1441,7 @@ func testQuery(t *testing.T, queryer Queryer) {
 			return
 		}
 
-		err = QueryFilterRow(queryer, context.Background(), object, "#all", where, "and", args, &result)
+		err = QueryRowFilter(queryer, context.Background(), object, "#all", where, "and", args, &result)
 		if err == nil {
 			t.Error(err)
 			return
@@ -1740,7 +1740,7 @@ func testUnify(t *testing.T, queryer Queryer) {
 	}
 	{
 		find := newFind()
-		err = QueryUnifyRow(queryer, context.Background(), find)
+		err = QueryRowUnify(queryer, context.Background(), find)
 		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
 			t.Error(err)
 			return
@@ -1748,7 +1748,7 @@ func testUnify(t *testing.T, queryer Queryer) {
 	}
 	{
 		find := newFind()
-		err = Default.QueryUnifyRow(queryer, context.Background(), find)
+		err = Default.QueryRowUnify(queryer, context.Background(), find)
 		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
 			t.Error(err)
 			return
@@ -1870,7 +1870,7 @@ func testUnify(t *testing.T, queryer Queryer) {
 		find := newFind()
 		querySQL, queryArgs := Default.QueryUnifySQL(find, "QueryRow")
 		row := queryer.QueryRow(context.Background(), querySQL, queryArgs...)
-		err = ScanUnifyRow(row, find)
+		err = ScanRowUnify(row, find)
 		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
 			t.Error(err)
 			return
@@ -1975,7 +1975,7 @@ func testUnifyError(t *testing.T, queryer Queryer) {
 		t.Error(err)
 		return
 	}
-	err = QueryUnifyRow(queryer, context.Background(), search)
+	err = QueryRowUnify(queryer, context.Background(), search)
 	if err == nil {
 		t.Error(err)
 		return
