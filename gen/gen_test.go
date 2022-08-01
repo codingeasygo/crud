@@ -212,7 +212,6 @@ func init() {
 	}
 	db.SetMaxOpenConns(1)
 	sharedSQLITE := sqlx.NewDbQueryer(db)
-	sharedSQLITE.NotAffected = true
 	_, _, err = sharedSQLITE.Exec(context.Background(), testsql.SQLITE_DROP)
 	if err != nil {
 		panic(err)

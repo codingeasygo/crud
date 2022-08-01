@@ -7,3 +7,4 @@ pgx/autogen
 coverage.html
 coverage.json
 coverage.xml
+sqlx/crud.sqlite

@@ -607,6 +607,7 @@ func (g *AutoGen) Generate() (err error) {
 				"reflect"
 				"context"
 				"fmt"
+				"strings"
 
 				"github.com/codingeasygo/crud"
 				"github.com/codingeasygo/util/attrvalid"

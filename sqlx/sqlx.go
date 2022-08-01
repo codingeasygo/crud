@@ -56,8 +56,7 @@ func (r *Rows) Close() (err error) {
 
 type TxQueryer struct {
 	*sql.Tx
-	ErrNoRows   error
-	NotAffected bool
+	ErrNoRows error
 }
 
 func NewTxQueryer(tx *sql.Tx) (queryer *TxQueryer) {
@@ -101,9 +100,6 @@ func (t *TxQueryer) Exec(ctx context.Context, query string, args ...interface{})
 	if err == nil {
 		affected, err = res.RowsAffected()
 	}
-	if t.NotAffected && err == nil && affected < 1 {
-		affected = 1
-	}
 	return
 }
 
@@ -137,8 +133,7 @@ func (t *TxQueryer) QueryRow(ctx context.Context, query string, args ...interfac
 
 type DbQueryer struct {
 	*sql.DB
-	ErrNoRows   error
-	NotAffected bool
+	ErrNoRows error
 }
 
 func NewDbQueryer(db *sql.DB) (queryer *DbQueryer) {
@@ -163,7 +158,6 @@ func (d *DbQueryer) Begin(ctx context.Context) (tx *TxQueryer, err error) {
 	if err == nil {
 		tx = NewTxQueryer(raw)
 		tx.ErrNoRows = d.ErrNoRows
-		tx.NotAffected = d.NotAffected
 	}
 	return
 }
@@ -178,9 +172,6 @@ func (d *DbQueryer) Exec(ctx context.Context, query string, args ...interface{})
 	}
 	if err == nil {
 		affected, err = res.RowsAffected()
-	}
-	if d.NotAffected && err == nil && affected < 1 {
-		affected = 1
 	}
 	return
 }
