@@ -175,8 +175,8 @@ func ({{.Arg.Name}} *{{.Struct.Name}}) UpdateFilterWheref(caller interface{}, ct
 	{{- if .Update.UpdateTime}}
 	{{.Arg.Name}}.UpdateTime = xsql.TimeNow()
 	{{- end}}
-	whereAll := []string{"tid=$%v"}
-	whereArg := []interface{}{{"{"}}{{.Arg.Name}}.TID}
+	whereAll := []string{"{{PrimaryField .Struct "Column"}}=$%v"}
+	whereArg := []interface{}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}}
 	if len(formats) > 0 {
 		whereAll = append(whereAll, formats)
 		whereArg = append(whereArg, formatArgs...)
