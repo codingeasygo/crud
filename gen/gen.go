@@ -633,7 +633,7 @@ func (g *AutoGen) Generate() (err error) {
 		`
 		if len(g.GetQueryer) > 0 {
 			g.OutFuncPre += fmt.Sprintf(`
-				var GetQueryer interface{} = %v
+				var GetQueryer interface{} = func() crud.Queryer { return %v() }
 			`, g.GetQueryer)
 		}
 	}
