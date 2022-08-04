@@ -21,6 +21,10 @@ type ZeroChecker interface {
 	IsZero() bool
 }
 
+type TableNameGetter interface {
+	GetTableName(args ...interface{}) string
+}
+
 func jsonString(v interface{}) string {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -129,6 +133,9 @@ func (c *CRUD) Table(v interface{}) (table string) {
 			if tableName, ok := f.(TableName); ok {
 				table = c.TablePrefix + string(tableName)
 				break
+			} else if getter, ok := f.(TableNameGetter); ok {
+				table = c.TablePrefix + getter.GetTableName(v)
+				break
 			}
 		}
 		return
@@ -138,7 +145,16 @@ func (c *CRUD) Table(v interface{}) (table string) {
 	numField := reflectType.NumField()
 	for i := 0; i < numField; i++ {
 		fieldType := reflectType.Field(i)
-		if fieldType.Name == "_" {
+		fieldValue := reflectValue.Field(i)
+		if fieldType.Name == "T" {
+			if getter, ok := fieldValue.Interface().(TableNameGetter); ok {
+				table = c.TablePrefix + getter.GetTableName(v, fieldType, fieldValue.Interface())
+				break
+			} else if t := fieldType.Tag.Get("table"); len(t) > 0 {
+				table = c.TablePrefix + t
+				break
+			}
+		} else if fieldType.Name == "_" {
 			if t := fieldType.Tag.Get("table"); len(t) > 0 {
 				table = c.TablePrefix + t
 				break

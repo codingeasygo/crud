@@ -45,7 +45,7 @@ const CrudObjectOrderbyAll = "type,update_time,create_time"
 
 /*CrudObject  represents crud_object */
 type CrudObject struct {
-	_            string            `table:"crud_object"`                                           /* the table name tag */
+	T            string            `table:"crud_object"`                                           /* the table name tag */
 	TID          int64             `json:"tid,omitempty" valid:"tid,r|i,r:0;"`                     /*  */
 	UserID       int64             `json:"user_id,omitempty" valid:"user_id,r|i,r:0;"`             /*  */
 	Type         CrudObjectType    `json:"type,omitempty" valid:"type,r|s,e:0;"`                   /* simple type in, A=1:test a, B=2:test b, C=3:test c */

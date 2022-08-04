@@ -22,7 +22,7 @@ func stringTitle(v string) string {
 	if len(v) < 1 {
 		return v
 	}
-	return strings.ToUpper(v[0:]) + v[1:]
+	return strings.ToUpper(v[:1]) + v[1:]
 }
 
 func ConvCamelCase(isTable bool, name string) (result string) {
@@ -274,6 +274,7 @@ type AutoGen struct {
 	TableRetAdd   map[string]string
 	TableInclude  xsql.StringArray
 	TableExclude  xsql.StringArray
+	TableNameType string
 	Queryer       interface{}
 	TableQueryer  func(queryer interface{}, tableSQL, columnSQL, schema string) (tables []*Table, err error)
 	TableSQL      string
@@ -442,8 +443,8 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 			"RowLock": "",
 		}
 	}
-	if g.TableQueryer == nil {
-		g.TableQueryer = Query
+	if len(g.TableNameType) < 1 {
+		g.TableNameType = "string"
 	}
 	for _, column := range table.Columns {
 		comments, ok := g.Comments[table.Name]
@@ -458,9 +459,10 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 	}
 	s := gen.AsStruct(table)
 	result := map[string]interface{}{
-		"Struct":     s,
-		"Code":       g.CodeSlice,
-		"GetQueryer": g.GetQueryer,
+		"TableNameType": g.TableNameType,
+		"Struct":        s,
+		"Code":          g.CodeSlice,
+		"GetQueryer":    g.GetQueryer,
 	}
 	fieldOptional := ""
 	fieldRequired := ""
@@ -590,6 +592,9 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 func (g *AutoGen) Generate() (err error) {
 	if g.TypeMap == nil {
 		g.TypeMap = map[string][]string{}
+	}
+	if g.TableQueryer == nil {
+		g.TableQueryer = Query
 	}
 	if len(g.OutPackage) < 1 {
 		g.OutPackage = "autogen"

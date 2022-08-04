@@ -25,7 +25,7 @@ const {{.Struct.Name}}OrderbyAll = "{{.Filter.Order}}"
 
 /*{{.Struct.Name}} {{ .Struct.Comment}} represents {{ .Struct.Table.Name }} */
 type {{ .Struct.Name }} struct {
-	_ string  %vtable:"{{.Struct.Table.Name}}"%v /* the table name tag */
+	T {{.TableNameType}}  %vtable:"{{.Struct.Table.Name}}"%v /* the table name tag */
 {{- range .Struct.Fields }}
 	{{ .Name }} {{FieldType $.Struct . }}  %vjson:"{{.Column.Name}},omitempty"{{FieldTags $.Struct . }}%v /* {{ .Column.Comment }} */
 {{- end }}

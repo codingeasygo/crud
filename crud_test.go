@@ -206,6 +206,43 @@ func TestNewValue(t *testing.T) {
 	}
 }
 
+type Object0 struct {
+	_ string `table:"crud_object"` /* the table name tag */
+}
+
+type Object1 struct {
+	T string `table:"crud_object"` /* the table name tag */
+}
+
+type Object2TableName string
+
+func (o Object2TableName) GetTableName(args ...interface{}) string {
+	return "abc"
+}
+
+type Object2 struct {
+	T Object2TableName
+}
+
+func TestTable(t *testing.T) {
+	if v := Table(&Object0{}); v != "crud_object" {
+		t.Error(v)
+		return
+	}
+	if v := Table(&Object1{}); v != "crud_object" {
+		t.Error(v)
+		return
+	}
+	if v := Table(&Object2{}); v != "abc" {
+		t.Error(v)
+		return
+	}
+	if v := Table([]interface{}{Object2TableName("")}); v != "abc" {
+		t.Error(v)
+		return
+	}
+}
+
 func TestFilterField(t *testing.T) {
 	object := &CrudObject{
 		Type:   "test",
