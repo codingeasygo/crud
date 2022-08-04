@@ -101,11 +101,12 @@ type TableName string
 
 type CRUD struct {
 	attrscan.Scanner
-	ArgFormat string
-	ErrNoRows error
-	Verbose   bool
-	Log       LogF
-	ParmConv  ParmConv
+	ArgFormat   string
+	ErrNoRows   error
+	Verbose     bool
+	Log         LogF
+	TablePrefix string
+	ParmConv    ParmConv
 }
 
 func (c *CRUD) getErrNoRows() (err error) {
@@ -126,7 +127,7 @@ func (c *CRUD) Table(v interface{}) (table string) {
 	if v, ok := v.([]interface{}); ok {
 		for _, f := range v {
 			if tableName, ok := f.(TableName); ok {
-				table = string(tableName)
+				table = c.TablePrefix + string(tableName)
 				break
 			}
 		}
@@ -139,7 +140,7 @@ func (c *CRUD) Table(v interface{}) (table string) {
 		fieldType := reflectType.Field(i)
 		if fieldType.Name == "_" {
 			if t := fieldType.Tag.Get("table"); len(t) > 0 {
-				table = t
+				table = c.TablePrefix + t
 				break
 			}
 		}
