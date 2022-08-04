@@ -18,10 +18,17 @@ import (
 	"github.com/codingeasygo/util/xsql"
 )
 
+func stringTitle(v string) string {
+	if len(v) < 1 {
+		return v
+	}
+	return strings.ToUpper(v[0:]) + v[1:]
+}
+
 func ConvCamelCase(isTable bool, name string) (result string) {
 	parts := strings.Split(name, "_")
 	for _, part := range parts {
-		result += strings.Title(part)
+		result += stringTitle(part)
 	}
 	return
 }
@@ -268,6 +275,7 @@ type AutoGen struct {
 	TableInclude  xsql.StringArray
 	TableExclude  xsql.StringArray
 	Queryer       interface{}
+	TableQueryer  func(queryer interface{}, tableSQL, columnSQL, schema string) (tables []*Table, err error)
 	TableSQL      string
 	ColumnSQL     string
 	Schema        string
@@ -319,7 +327,7 @@ func (g *AutoGen) PrimaryField(s *Struct, key string) string {
 		case "Type":
 			return f.Type
 		case "TypeArray":
-			return fmt.Sprintf("xsql.%vArray", strings.Title(f.Type))
+			return fmt.Sprintf("xsql.%vArray", stringTitle(f.Type))
 		case "Column":
 			return f.Column.Name
 		default:
@@ -394,7 +402,7 @@ func (g *AutoGen) FieldTags(s *Struct, field *Field) (allTag string) {
 func (g *AutoGen) FieldDefineType(s *Struct, field *Field) (result string) {
 	typ := g.FieldType(s, field)
 	if strings.HasPrefix(typ, "*") {
-		result = strings.Title(strings.TrimPrefix(typ, "*")) + "Ptr"
+		result = stringTitle(strings.TrimPrefix(typ, "*")) + "Ptr"
 	} else if strings.HasPrefix(typ, "xsql.") {
 		result = strings.TrimPrefix(typ, "xsql.")
 		if result == "M" {
@@ -405,7 +413,7 @@ func (g *AutoGen) FieldDefineType(s *Struct, field *Field) (result string) {
 	} else if strings.HasPrefix(typ, "decimal.") {
 		result = strings.TrimPrefix(typ, "decimal.")
 	} else {
-		result = strings.Title(typ)
+		result = stringTitle(typ)
 	}
 	return
 }
@@ -433,6 +441,9 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 		g.CodeSlice = map[string]string{
 			"RowLock": "",
 		}
+	}
+	if g.TableQueryer == nil {
+		g.TableQueryer = Query
 	}
 	for _, column := range table.Columns {
 		comments, ok := g.Comments[table.Name]
@@ -645,7 +656,7 @@ func (g *AutoGen) Generate() (err error) {
 			`, "GetQueryer")
 		}
 	}
-	allTables, err := Query(g.Queryer, g.TableSQL, g.ColumnSQL, g.Schema)
+	allTables, err := g.TableQueryer(g.Queryer, g.TableSQL, g.ColumnSQL, g.Schema)
 	if err != nil {
 		return
 	}
