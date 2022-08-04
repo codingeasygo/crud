@@ -147,14 +147,18 @@ func (c *CRUD) Table(v interface{}) (table string) {
 		fieldType := reflectType.Field(i)
 		fieldValue := reflectValue.Field(i)
 		if fieldType.Name == "T" {
-			if getter, ok := fieldValue.Interface().(TableNameGetter); ok {
-				table = c.TablePrefix + getter.GetTableName(v, fieldType, fieldValue.Interface())
-				break
-			} else if t := fieldType.Tag.Get("table"); len(t) > 0 {
-				table = c.TablePrefix + t
-				break
+			t := fieldType.Tag.Get("table")
+			if len(t) < 1 {
+				continue
 			}
-		} else if fieldType.Name == "_" {
+			if getter, ok := fieldValue.Interface().(TableNameGetter); ok {
+				table = c.TablePrefix + getter.GetTableName(v, t, fieldType, fieldValue.Interface())
+			} else {
+				table = c.TablePrefix + t
+			}
+			break
+		}
+		if fieldType.Name == "_" {
 			if t := fieldType.Tag.Get("table"); len(t) > 0 {
 				table = c.TablePrefix + t
 				break

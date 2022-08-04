@@ -207,6 +207,7 @@ func TestNewValue(t *testing.T) {
 }
 
 type Object0 struct {
+	A string
 	_ string `table:"crud_object"` /* the table name tag */
 }
 
@@ -221,7 +222,11 @@ func (o Object2TableName) GetTableName(args ...interface{}) string {
 }
 
 type Object2 struct {
-	T Object2TableName
+	T Object2TableName `table:"crud_object"`
+}
+
+type Object3 struct {
+	T string `table:""` /* the table name tag */
 }
 
 func TestTable(t *testing.T) {
@@ -234,6 +239,10 @@ func TestTable(t *testing.T) {
 		return
 	}
 	if v := Table(&Object2{}); v != "abc" {
+		t.Error(v)
+		return
+	}
+	if v := Table(&Object3{}); v != "" {
 		t.Error(v)
 		return
 	}
