@@ -23,7 +23,10 @@ var {{$.Struct.Name}}{{$field.Name}}Show={{$.Struct.Name}}{{$field.Name}}Array{{
 const {{.Struct.Name}}OrderbyAll = "{{.Filter.Order}}"
 {{- end }}
 
-/*{{.Struct.Name}} {{ .Struct.Comment}} represents {{ .Struct.Table.Name }} */
+/*
+ * {{.Struct.Name}} {{ .Struct.Comment}} represents {{ .Struct.Table.Name }}
+ * Fields:{{- range .Struct.Fields }}{{.Column.Name}},{{- end }}
+ */
 type {{ .Struct.Name }} struct {
 	T {{.TableNameType}}  %vtable:"{{.Struct.Table.Name}}"%v /* the table name tag */
 {{- range .Struct.Fields }}
