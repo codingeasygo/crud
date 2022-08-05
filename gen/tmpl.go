@@ -121,13 +121,13 @@ func (o {{$.Struct.Name}}{{$field.Name}}Array) InArray() (res string) {
 
 //MetaWith{{.Struct.Name}} will return {{.Struct.Table.Name}} meta data
 func MetaWith{{.Struct.Name}}(fields ...interface{}) (v []interface{}) {
-	v = crud.MetaWith("{{.Struct.Table.Name}}", fields...)
+	v = crud.MetaWith({{.TableNameType}}("{{.Struct.Table.Name}}"), fields...)
 	return
 }
 
 //MetaWith will return {{.Struct.Table.Name}} meta data
 func ({{.Arg.Name}} *{{.Struct.Name}}) MetaWith(fields ...interface{}) (v []interface{}) {
-	v = crud.MetaWith("{{.Struct.Table.Name}}", fields...)
+	v = crud.MetaWith({{.TableNameType}}("{{.Struct.Table.Name}}"), fields...)
 	return
 }
 
