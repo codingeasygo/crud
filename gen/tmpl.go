@@ -187,8 +187,8 @@ func ({{.Arg.Name}} *{{.Struct.Name}}) UpdateFilterWheref(caller interface{}, ct
 
 {{if .Add.Normal}}
 //Add{{.Struct.Name}} will add {{.Struct.Table.Name}} to database
-func Add{{.Struct.Name}}({{.Arg.Name}} *{{.Struct.Name}}) (err error) {
-	err = Add{{.Struct.Name}}Call(GetQueryer, context.Background(), {{.Arg.Name}})
+func Add{{.Struct.Name}}(ctx context.Context, {{.Arg.Name}} *{{.Struct.Name}}) (err error) {
+	err = Add{{.Struct.Name}}Call(GetQueryer, ctx, {{.Arg.Name}})
 	return
 }
 
@@ -200,8 +200,8 @@ func Add{{.Struct.Name}}Call(caller interface{}, ctx context.Context, {{.Arg.Nam
 {{end}}
 
 //Update{{.Struct.Name}}Filter will update {{.Struct.Table.Name}} to database
-func Update{{.Struct.Name}}Filter({{.Arg.Name}} *{{.Struct.Name}}, filter string) (err error) {
-	err = Update{{.Struct.Name}}FilterCall(GetQueryer, context.Background(), {{.Arg.Name}}, filter)
+func Update{{.Struct.Name}}Filter(ctx context.Context, {{.Arg.Name}} *{{.Struct.Name}}, filter string) (err error) {
+	err = Update{{.Struct.Name}}FilterCall(GetQueryer, ctx, {{.Arg.Name}}, filter)
 	return
 }
 
@@ -212,8 +212,8 @@ func Update{{.Struct.Name}}FilterCall(caller interface{}, ctx context.Context, {
 }
 
 //Update{{.Struct.Name}}Wheref will update {{.Struct.Table.Name}} to database
-func Update{{.Struct.Name}}Wheref({{.Arg.Name}} *{{.Struct.Name}}, formats string, formatArgs ...interface{}) (err error) {
-	err = Update{{.Struct.Name}}WherefCall(GetQueryer, context.Background(), {{.Arg.Name}}, formats, formatArgs...)
+func Update{{.Struct.Name}}Wheref(ctx context.Context, {{.Arg.Name}} *{{.Struct.Name}}, formats string, formatArgs ...interface{}) (err error) {
+	err = Update{{.Struct.Name}}WherefCall(GetQueryer, ctx, {{.Arg.Name}}, formats, formatArgs...)
 	return
 }
 
@@ -224,8 +224,8 @@ func Update{{.Struct.Name}}WherefCall(caller interface{}, ctx context.Context, {
 }
 
 //Update{{.Struct.Name}}FilterWheref will update {{.Struct.Table.Name}} to database
-func Update{{.Struct.Name}}FilterWheref({{.Arg.Name}} *{{.Struct.Name}}, filter string, formats string, formatArgs ...interface{}) (err error) {
-	err = Update{{.Struct.Name}}FilterWherefCall(GetQueryer, context.Background(), {{.Arg.Name}}, filter, formats, formatArgs...)
+func Update{{.Struct.Name}}FilterWheref(ctx context.Context, {{.Arg.Name}} *{{.Struct.Name}}, filter string, formats string, formatArgs ...interface{}) (err error) {
+	err = Update{{.Struct.Name}}FilterWherefCall(GetQueryer, ctx, {{.Arg.Name}}, filter, formats, formatArgs...)
 	return
 }
 
@@ -236,8 +236,8 @@ func Update{{.Struct.Name}}FilterWherefCall(caller interface{}, ctx context.Cont
 }
 
 //Find{{.Struct.Name}}Call will find {{.Struct.Table.Name}} by id from database
-func Find{{.Struct.Name}}({{.Arg.Name}}ID {{PrimaryField .Struct "Type"}}) ({{.Arg.Name}} *{{.Struct.Name}}, err error) {
-	{{.Arg.Name}}, err = Find{{.Struct.Name}}Call(GetQueryer, context.Background(), {{.Arg.Name}}ID, false)
+func Find{{.Struct.Name}}(ctx context.Context, {{.Arg.Name}}ID {{PrimaryField .Struct "Type"}}) ({{.Arg.Name}} *{{.Struct.Name}}, err error) {
+	{{.Arg.Name}}, err = Find{{.Struct.Name}}Call(GetQueryer, ctx, {{.Arg.Name}}ID, false)
 	return
 }
 
@@ -260,8 +260,8 @@ func Find{{.Struct.Name}}WhereCall(caller interface{}, ctx context.Context, lock
 }
 
 //Find{{.Struct.Name}}Wheref will find {{.Struct.Table.Name}} by where from database
-func Find{{.Struct.Name}}Wheref(format string, args ...interface{}) ({{.Arg.Name}} *{{.Struct.Name}}, err error) {
-	{{.Arg.Name}}, err = Find{{.Struct.Name}}WherefCall(GetQueryer, context.Background(), false, format, args...)
+func Find{{.Struct.Name}}Wheref(ctx context.Context, format string, args ...interface{}) ({{.Arg.Name}} *{{.Struct.Name}}, err error) {
+	{{.Arg.Name}}, err = Find{{.Struct.Name}}WherefCall(GetQueryer, ctx, false, format, args...)
 	return
 }
 
@@ -278,8 +278,8 @@ func Find{{.Struct.Name}}WherefCall(caller interface{}, ctx context.Context, loc
 }
 
 //List{{.Struct.Name}}ByID will list {{.Struct.Table.Name}} by id from database
-func List{{.Struct.Name}}ByID({{.Arg.Name}}IDs ...{{PrimaryField .Struct "Type"}}) ({{.Arg.Name}}List []*{{.Struct.Name}}, {{.Arg.Name}}Map map[{{PrimaryField .Struct "Type"}}]*{{.Struct.Name}}, err error) {
-	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}ByIDCall(GetQueryer, context.Background(), {{.Arg.Name}}IDs...)
+func List{{.Struct.Name}}ByID(ctx context.Context, {{.Arg.Name}}IDs ...{{PrimaryField .Struct "Type"}}) ({{.Arg.Name}}List []*{{.Struct.Name}}, {{.Arg.Name}}Map map[{{PrimaryField .Struct "Type"}}]*{{.Struct.Name}}, err error) {
+	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}ByIDCall(GetQueryer, ctx, {{.Arg.Name}}IDs...)
 	return
 }
 
@@ -294,8 +294,8 @@ func List{{.Struct.Name}}ByIDCall(caller interface{}, ctx context.Context, {{.Ar
 }
 
 //Scan{{.Struct.Name}}ByID will list {{.Struct.Table.Name}} by id from database
-func Scan{{.Struct.Name}}ByID({{.Arg.Name}}IDs []{{PrimaryField .Struct "Type"}}, dest ...interface{}) (err error) {
-	err = Scan{{.Struct.Name}}ByIDCall(GetQueryer, context.Background(), {{.Arg.Name}}IDs, dest...)
+func Scan{{.Struct.Name}}ByID(ctx context.Context, {{.Arg.Name}}IDs []{{PrimaryField .Struct "Type"}}, dest ...interface{}) (err error) {
+	err = Scan{{.Struct.Name}}ByIDCall(GetQueryer, ctx, {{.Arg.Name}}IDs, dest...)
 	return
 }
 
@@ -309,8 +309,8 @@ func Scan{{.Struct.Name}}ByIDCall(caller interface{}, ctx context.Context, {{.Ar
 }
 
 //Scan{{.Struct.Name}} will list {{.Struct.Table.Name}} by format from database
-func Scan{{.Struct.Name}}Wheref(format string, args []interface{}, dest ...interface{}) (err error) {
-	err = Scan{{.Struct.Name}}WherefCall(GetQueryer, context.Background(), format, args, dest...)
+func Scan{{.Struct.Name}}Wheref(ctx context.Context, format string, args []interface{}, dest ...interface{}) (err error) {
+	err = Scan{{.Struct.Name}}WherefCall(GetQueryer, ctx, format, args, dest...)
 	return
 }
 
@@ -380,7 +380,7 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		return
 	}
 	{{- if .Add.Normal}}
-	err = Add{{.Struct.Name}}({{.Arg.Name}})
+	err = Add{{.Struct.Name}}(context.Background(), {{.Arg.Name}})
 	{{- else}}
 	err = {{.Arg.Name}}.Insert(GetQueryer, context.Background())
 	{{- end}}
@@ -393,22 +393,22 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		return
 	}
 	{{.Arg.Name}}.Valid()
-	err = Update{{.Struct.Name}}Filter({{.Arg.Name}}, "")
+	err = Update{{.Struct.Name}}Filter(context.Background(), {{.Arg.Name}}, "")
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	err = Update{{.Struct.Name}}Wheref({{.Arg.Name}}, "")
+	err = Update{{.Struct.Name}}Wheref(context.Background(), {{.Arg.Name}}, "")
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	err = Update{{.Struct.Name}}FilterWheref({{.Arg.Name}}, {{.Struct.Name}}FilterUpdate, "{{PrimaryField .Struct "Column"}}=$%v", {{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
+	err = Update{{.Struct.Name}}FilterWheref(context.Background(), {{.Arg.Name}}, {{.Struct.Name}}FilterUpdate, "{{PrimaryField .Struct "Column"}}=$%v", {{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	find{{.Struct.Name}}, err := Find{{.Struct.Name}}({{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
+	find{{.Struct.Name}}, err := Find{{.Struct.Name}}(context.Background(), {{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
 	if err != nil {
 		t.Error(err)
 		return
@@ -417,7 +417,7 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		t.Error("find id error")
 		return
 	}
-	find{{.Struct.Name}}, err = Find{{.Struct.Name}}Wheref("{{PrimaryField .Struct "Column"}}=$%v", {{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
+	find{{.Struct.Name}}, err = Find{{.Struct.Name}}Wheref(context.Background(), "{{PrimaryField .Struct "Column"}}=$%v", {{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
 	if err != nil {
 		t.Error(err)
 		return
@@ -444,12 +444,12 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		t.Error("find id error")
 		return
 	}
-	{{.Arg.Name}}List, {{.Arg.Name}}Map, err := List{{.Struct.Name}}ByID()
+	{{.Arg.Name}}List, {{.Arg.Name}}Map, err := List{{.Struct.Name}}ByID(context.Background())
 	if err != nil || len({{.Arg.Name}}List) > 0 || {{.Arg.Name}}Map == nil || len({{.Arg.Name}}Map) > 0 {
 		t.Error(err)
 		return
 	}
-	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}ByID({{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
+	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}ByID(context.Background(), {{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
 	if err != nil {
 		t.Error(err)
 		return
@@ -460,7 +460,7 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 	}
 	{{.Arg.Name}}List = nil
 	{{.Arg.Name}}Map = nil
-	err = Scan{{.Struct.Name}}ByID([]{{PrimaryField .Struct "Type"}}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryField .Struct "Column"}}")
+	err = Scan{{.Struct.Name}}ByID(context.Background(), []{{PrimaryField .Struct "Type"}}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryField .Struct "Column"}}")
 	if err != nil {
 		t.Error(err)
 		return
@@ -471,7 +471,7 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 	}
 	{{.Arg.Name}}List = nil
 	{{.Arg.Name}}Map = nil
-	err = Scan{{.Struct.Name}}Wheref("{{PrimaryField .Struct "Column"}}=$%v", []interface{}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryField .Struct "Column"}}")
+	err = Scan{{.Struct.Name}}Wheref(context.Background(), "{{PrimaryField .Struct "Column"}}=$%v", []interface{}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryField .Struct "Column"}}")
 	if err != nil {
 		t.Error(err)
 		return

@@ -146,10 +146,15 @@ var PgGen = AutoGen{
 }
 
 func TestPgGen(t *testing.T) {
-	defer os.RemoveAll(PgGen.Out)
+	var err error
+	defer func() {
+		if err == nil {
+			os.RemoveAll(PgGen.Out)
+		}
+	}()
 	os.MkdirAll(PgGen.Out, os.ModePerm)
 	ioutil.WriteFile(filepath.Join(PgGen.Out, "auto_test.go"), []byte(PgInit), os.ModePerm)
-	err := PgGen.Generate()
+	err = PgGen.Generate()
 	if err != nil {
 		t.Error(err)
 		return

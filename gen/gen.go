@@ -631,10 +631,14 @@ func (g *AutoGen) Generate() (err error) {
 				"github.com/codingeasygo/util/xsql"
 			)
 		`
-		if len(g.GetQueryer) > 0 {
+		if len(g.GetQueryer) > 0 && g.GetQueryer != "GetQueryer" {
 			g.OutFuncPre += fmt.Sprintf(`
 				var GetQueryer interface{} = func() crud.Queryer { return %v() }
 			`, g.GetQueryer)
+		} else if len(g.GetQueryer) > 0 && g.GetQueryer == "GetQueryer" {
+			g.OutFuncPre += `
+				var GetQueryer interface{} = func() crud.Queryer { panic("get crud queryer is not setted") }
+			`
 		}
 	}
 	if len(g.OutTestPre) < 1 {
