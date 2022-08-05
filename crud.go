@@ -1039,12 +1039,16 @@ func (c *CRUD) ScanUnifyDest(v interface{}, queryName string) (modelValue interf
 	for i := 0; i < queryNum; i++ {
 		fieldValue := queryValue.Field(i)
 		fieldType := queryType.Type.Field(i)
-		if value, ok := fieldValue.Interface().(FilterValue); ok && fieldType.Name == "Filter" && len(value) > 0 {
-			queryFilter = string(value)
+		if value, ok := fieldValue.Interface().(FilterValue); ok && fieldType.Name == "Filter" {
+			if len(value) > 0 {
+				queryFilter = string(value)
+			}
 			continue
 		}
-		if getter, ok := fieldValue.Interface().(FilterGetter); ok && getter != nil {
-			queryFilter = getter.GetFilter(v, fieldValue, fieldValue)
+		if getter, ok := fieldValue.Interface().(FilterGetter); ok {
+			if getter != nil {
+				queryFilter = getter.GetFilter(v, fieldValue, fieldValue)
+			}
 			continue
 		}
 		scan := fieldType.Tag.Get("scan")

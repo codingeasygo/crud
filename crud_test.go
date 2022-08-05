@@ -1832,6 +1832,7 @@ func testUnify(t *testing.T, queryer Queryer) {
 			filterValue.QueryRow.Object == nil || len(filterValue.QueryRow.Object.Title) > 0 || filterValue.QueryRow.Object.IntValue < 1 ||
 			filterValue.Count.All < 1 {
 			t.Error(err)
+			return
 		}
 		filterGetter := newFilterGetter()
 		err = ApplyUnify(queryer, context.Background(), filterGetter)
@@ -1840,6 +1841,7 @@ func testUnify(t *testing.T, queryer Queryer) {
 			filterGetter.QueryRow.Object == nil || len(filterGetter.QueryRow.Object.Title) > 0 || filterGetter.QueryRow.Object.IntValue < 1 ||
 			filterGetter.Count.All < 1 {
 			t.Error(err)
+			return
 		}
 	}
 	{
