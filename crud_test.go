@@ -1560,6 +1560,13 @@ func testQuery(t *testing.T, queryer Queryer) {
 			return
 		}
 	}
+	{ //dest error
+		err = Query(queryer, context.Background(), converter.StringPtr(""), "#all", "select string_ptr from crud_object", nil)
+		if err == nil {
+			t.Errorf("%v", err)
+			return
+		}
+	}
 }
 
 func TestCount(t *testing.T) {

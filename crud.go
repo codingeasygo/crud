@@ -1052,6 +1052,10 @@ func (c *CRUD) ScanUnifyDest(v interface{}, queryName string) (modelValue interf
 }
 
 func (c *CRUD) destSet(value reflect.Value, filter string, dests ...interface{}) (err error) {
+	if len(dests) < 1 {
+		err = fmt.Errorf("scan dest is empty")
+		return
+	}
 	valueField := func(key string) (v reflect.Value, e error) {
 		if _, ok := value.Interface().([]interface{}); ok {
 			parts := strings.SplitN(filter, ".", 2)
