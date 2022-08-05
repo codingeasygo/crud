@@ -324,6 +324,21 @@ func TestFilterField(t *testing.T) {
 		}
 	}
 	{
+		v := MetaWith(TableNameGetterF(func(args ...interface{}) string {
+			return "crud_object"
+		}), int64(0))
+		table := Table(v)
+		if table != "crud_object" {
+			t.Error("error")
+			return
+		}
+		table, fields := QueryField(v, "tid#all")
+		if table != "crud_object" || len(fields) != 1 {
+			t.Error("error")
+			return
+		}
+	}
+	{
 		table, fields := QueryField(object, "t.tid#all")
 		if table != "crud_object t" || len(fields) != 1 || fields[0] != "t.tid" {
 			t.Error("error")

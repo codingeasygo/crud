@@ -25,6 +25,10 @@ type TableNameGetter interface {
 	GetTableName(args ...interface{}) string
 }
 
+type TableNameGetterF func(args ...interface{}) string
+
+func (t TableNameGetterF) GetTableName(args ...interface{}) string { return t(args...) }
+
 type FilterGetter interface {
 	GetFilter(args ...interface{}) string
 }
@@ -80,11 +84,15 @@ func NewValue(v interface{}) (value reflect.Value) {
 }
 
 func MetaWith(o interface{}, fields ...interface{}) (v []interface{}) {
-	strName, ok := o.(string)
-	if !ok {
-		strName = Table(o)
+	tableName := ""
+	if name, ok := o.(string); ok {
+		tableName = name
+	} else if getter, ok := o.(TableNameGetter); ok {
+		tableName = getter.GetTableName()
+	} else {
+		tableName = Table(o)
 	}
-	v = append(v, TableName(strName))
+	v = append(v, TableName(tableName))
 	v = append(v, fields...)
 	return
 }
