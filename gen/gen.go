@@ -472,6 +472,7 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 	fieldUpdate := ""
 	fieldOrder := ""
 	var fieldOptionalValue xsql.StringArray
+	var fieldRequiredValue xsql.StringArray
 	var fieldUpdateValue xsql.StringArray
 	if fieldConfig := g.FieldFilter[table.Name]; len(fieldConfig) > 0 {
 		fieldOptional = fieldConfig[FieldsOptional]
@@ -480,6 +481,9 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 		fieldOrder = fieldConfig[FieldsOrder]
 		if len(fieldOptional) > 0 {
 			fieldOptionalValue = xsql.AsStringArray(strings.SplitN(fieldOptional, "#", 2)[0])
+		}
+		if len(fieldRequired) > 0 {
+			fieldRequiredValue = xsql.AsStringArray(strings.SplitN(fieldRequired, "#", 2)[0])
 		}
 		if len(fieldUpdate) > 0 {
 			fieldUpdateValue = xsql.AsStringArray(strings.SplitN(fieldUpdate, "#", 2)[0])
@@ -502,12 +506,14 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 	fieldUpdateAll := []*Field{}
 	for _, field := range s.Fields {
 		update := fieldUpdateValue.HavingOne(field.Column.Name)
+		onlyAdd := fieldRequiredValue.HavingOne(field.Column.Name) && !update
 		optional := fieldOptionalValue.HavingOne(field.Column.Name)
 		field.External = xmap.M{
 			"Update":   update,
+			"OnlyAdd":  onlyAdd,
 			"Optional": optional,
 		}
-		if update {
+		if update || onlyAdd {
 			fieldUpdateAll = append(fieldUpdateAll, field)
 		}
 	}
