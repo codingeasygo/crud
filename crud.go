@@ -25,6 +25,14 @@ type TableNameGetter interface {
 	GetTableName(args ...interface{}) string
 }
 
+type FilterGetter interface {
+	GetFilter(args ...interface{}) string
+}
+
+type FilterGetterF func(args ...interface{}) string
+
+func (f FilterGetterF) GetFilter(args ...interface{}) string { return f(args...) }
+
 func jsonString(v interface{}) string {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -102,6 +110,7 @@ type NameConv func(on, name string, field reflect.StructField) string
 type ParmConv func(on, fieldName, fieldFunc string, field reflect.StructField, value interface{}) interface{}
 type LogF func(caller int, format string, args ...interface{})
 type TableName string
+type FilterValue string
 
 type CRUD struct {
 	attrscan.Scanner
@@ -970,7 +979,21 @@ func (c *CRUD) queryUnifySQL(caller int, v interface{}, field string) (sql strin
 	reflectType := reflectValue.Type()
 	modelValue := reflectValue.FieldByName("Model")
 	queryType, _ := reflectType.FieldByName(field)
+	queryValue := reflectValue.FieldByName(field)
 	queryFilter := queryType.Tag.Get("filter")
+	queryNum := queryType.Type.NumField()
+	for i := 0; i < queryNum; i++ {
+		fieldValue := queryValue.Field(i)
+		fieldType := queryType.Type.Field(i)
+		if value, ok := fieldValue.Interface().(FilterValue); ok && fieldType.Name == "Filter" && len(value) > 0 {
+			queryFilter = string(value)
+			continue
+		}
+		if getter, ok := fieldValue.Interface().(FilterGetter); ok && getter != nil {
+			queryFilter = getter.GetFilter(v, fieldValue, fieldValue)
+			continue
+		}
+	}
 	sql = c.querySQL(caller+1, modelValue.Addr().Interface(), queryFilter)
 	sql, args = c.joinWhereUnify(caller+1, sql, nil, v)
 	sql = c.joinPageUnify(caller+1, sql, v)
@@ -1006,7 +1029,17 @@ func (c *CRUD) ScanUnifyDest(v interface{}, queryName string) (modelValue interf
 	queryFilter = queryType.Tag.Get("filter")
 	queryNum := queryType.Type.NumField()
 	for i := 0; i < queryNum; i++ {
-		scan := queryType.Type.Field(i).Tag.Get("scan")
+		fieldValue := queryValue.Field(i)
+		fieldType := queryType.Type.Field(i)
+		if value, ok := fieldValue.Interface().(FilterValue); ok && fieldType.Name == "Filter" && len(value) > 0 {
+			queryFilter = string(value)
+			continue
+		}
+		if getter, ok := fieldValue.Interface().(FilterGetter); ok && getter != nil {
+			queryFilter = getter.GetFilter(v, fieldValue, fieldValue)
+			continue
+		}
+		scan := fieldType.Tag.Get("scan")
 		if scan == "-" {
 			continue
 		}

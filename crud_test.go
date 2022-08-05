@@ -1706,6 +1706,42 @@ type FindCrudObjectUnify struct {
 	} `json:"query_row" filter:"#all"`
 }
 
+type FilterValueCrudObjectUnify struct {
+	Model CrudObject `json:"model"`
+	Where struct {
+		TID int64 `json:"tid"`
+	} `json:"where" join:"and"`
+	Query struct {
+		Filter  FilterValue   `json:"filter"`
+		Objects []*CrudObject `json:"objects"`
+	} `json:"query" filter:"#all"`
+	QueryRow struct {
+		Filter FilterValue `json:"filter"`
+		Object *CrudObject `json:"object"`
+	} `json:"query_row" filter:"#all"`
+	Count struct {
+		All int64 `json:"all" scan:"tid"`
+	} `json:"count" filter:"count(tid)#all"`
+}
+
+type FilterGetterCrudObjectUnify struct {
+	Model CrudObject `json:"model"`
+	Where struct {
+		TID int64 `json:"tid"`
+	} `json:"where" join:"and"`
+	Query struct {
+		Filter  FilterGetter  `json:"filter"`
+		Objects []*CrudObject `json:"objects"`
+	} `json:"query" filter:"#all"`
+	QueryRow struct {
+		Filter FilterGetter `json:"filter"`
+		Object *CrudObject  `json:"object"`
+	} `json:"query_row" filter:"#all"`
+	Count struct {
+		All int64 `json:"all" scan:"tid"`
+	} `json:"count" filter:"count(tid)#all"`
+}
+
 func TestUnify(t *testing.T) {
 	clearPG()
 	testUnify(t, getPG())
@@ -1713,7 +1749,7 @@ func TestUnify(t *testing.T) {
 
 func testUnify(t *testing.T, queryer Queryer) {
 	var err error
-	addTestMultiObject(queryer)
+	object, _, _ := addTestMultiObject(queryer)
 	newSearch := func() *SearchCrudObjectUnify {
 		search := &SearchCrudObjectUnify{}
 		search.Where.UserID = 100
@@ -1736,6 +1772,24 @@ func testUnify(t *testing.T, queryer Queryer) {
 		find.QueryRow.Enabled = true
 		return find
 	}
+	newFilterValue := func() *FilterValueCrudObjectUnify {
+		filter := &FilterValueCrudObjectUnify{}
+		filter.Where.TID = object.TID
+		filter.Query.Filter = FilterValue("tid,title#all")
+		filter.QueryRow.Filter = FilterValue("tid,int_value#all")
+		return filter
+	}
+	newFilterGetter := func() *FilterGetterCrudObjectUnify {
+		filter := &FilterGetterCrudObjectUnify{}
+		filter.Where.TID = object.TID
+		filter.Query.Filter = FilterGetterF(func(args ...interface{}) string {
+			return "tid,title#all"
+		})
+		filter.QueryRow.Filter = FilterGetterF(func(args ...interface{}) string {
+			return "tid,int_value#all"
+		})
+		return filter
+	}
 	{
 		search := newSearch()
 		err = ApplyUnify(queryer, context.Background(), search)
@@ -1748,6 +1802,22 @@ func testUnify(t *testing.T, queryer Queryer) {
 		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
 			t.Error(err)
 			return
+		}
+		filterValue := newFilterValue()
+		err = ApplyUnify(queryer, context.Background(), filterValue)
+		if err != nil ||
+			len(filterValue.Query.Objects) < 1 || len(filterValue.Query.Objects[0].Title) < 1 || filterValue.Query.Objects[0].IntValue > 0 ||
+			filterValue.QueryRow.Object == nil || len(filterValue.QueryRow.Object.Title) > 0 || filterValue.QueryRow.Object.IntValue < 1 ||
+			filterValue.Count.All < 1 {
+			t.Error(err)
+		}
+		filterGetter := newFilterGetter()
+		err = ApplyUnify(queryer, context.Background(), filterGetter)
+		if err != nil ||
+			len(filterGetter.Query.Objects) < 1 || len(filterGetter.Query.Objects[0].Title) < 1 || filterGetter.Query.Objects[0].IntValue > 0 ||
+			filterGetter.QueryRow.Object == nil || len(filterGetter.QueryRow.Object.Title) > 0 || filterGetter.QueryRow.Object.IntValue < 1 ||
+			filterGetter.Count.All < 1 {
+			t.Error(err)
 		}
 	}
 	{
