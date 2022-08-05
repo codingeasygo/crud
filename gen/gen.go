@@ -261,6 +261,7 @@ const (
 	FieldsRequired = "required"
 	FieldsUpdate   = "update"
 	FieldsOrder    = "order"
+	FieldsQuery    = "query"
 )
 
 type AutoGen struct {
@@ -471,6 +472,7 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 	fieldInsert := ""
 	fieldUpdate := ""
 	fieldOrder := ""
+	fieldQuery := ""
 	var fieldOptionalValue xsql.StringArray
 	var fieldRequiredValue xsql.StringArray
 	var fieldUpdateValue xsql.StringArray
@@ -479,6 +481,7 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 		fieldRequired = fieldConfig[FieldsRequired]
 		fieldUpdate = fieldConfig[FieldsUpdate]
 		fieldOrder = fieldConfig[FieldsOrder]
+		fieldQuery = fieldConfig[FieldsQuery]
 		if len(fieldOptional) > 0 {
 			fieldOptionalValue = xsql.AsStringArray(strings.SplitN(fieldOptional, "#", 2)[0])
 		}
@@ -502,6 +505,9 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 			fieldUpdate = strings.Join(parts, ",")
 			fieldUpdateValue = xsql.AsStringArray(strings.SplitN(fieldUpdate, "#", 2)[0])
 		}
+		if len(fieldQuery) < 1 {
+			fieldQuery = "#all"
+		}
 	}
 	fieldUpdateAll := []*Field{}
 	for _, field := range s.Fields {
@@ -523,6 +529,7 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 		"Insert":   fieldInsert,
 		"Update":   strings.TrimPrefix(fieldUpdate+",update_time", ","),
 		"Order":    fieldOrder,
+		"Query":    fieldQuery,
 	}
 	arg := strings.ToLower(s.Name[0:1]) + s.Name[1:]
 	result["Arg"] = map[string]interface{}{
