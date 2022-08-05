@@ -290,8 +290,10 @@ type AutoGen struct {
 	OutDefinePre  string
 	OutDefineFile string
 	OutFuncPre    string
+	OutFuncCommon string
 	OutFuncFile   string
 	OutTestPre    string
+	OutTestCommon string
 	OutTestFile   string
 }
 
@@ -641,6 +643,14 @@ func (g *AutoGen) Generate() (err error) {
 			`
 		}
 	}
+	if len(g.OutFuncCommon) < 1 {
+		g.OutFuncCommon = `
+			//Validable is interface to valid
+			type Validable interface {
+				Valid() error
+			}
+		`
+	}
 	if len(g.OutTestPre) < 1 {
 		g.OutTestPre = `
 			//auto gen func by autogen
@@ -738,6 +748,7 @@ func (g *AutoGen) Generate() (err error) {
 		generator.OnPre = g.OnPre
 		buffer := bytes.NewBuffer(nil)
 		fmt.Fprintf(buffer, g.OutFuncPre, g.OutPackage)
+		fmt.Fprintf(buffer, "%v", g.OutFuncCommon)
 		err = generator.GenerateByTemplate("func", StructFuncTmpl, buffer)
 		if err != nil {
 			return
@@ -763,6 +774,7 @@ func (g *AutoGen) Generate() (err error) {
 		generator.OnPre = g.OnPre
 		buffer := bytes.NewBuffer(nil)
 		fmt.Fprintf(buffer, g.OutTestPre, g.OutPackage)
+		fmt.Fprintf(buffer, "%v", g.OutTestCommon)
 		err = generator.GenerateByTemplate("test", StructTestTmpl, buffer)
 		if err != nil {
 			return
