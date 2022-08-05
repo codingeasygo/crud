@@ -473,17 +473,23 @@ func (c *CRUD) JoinWheref(sql string, args []interface{}, formats string, format
 
 func (c *CRUD) joinWheref(caller int, sql string, args []interface{}, formats string, formatArgs ...interface{}) (sql_ string, args_ []interface{}) {
 	sql_, args_ = sql, args
-	if len(formats) > 0 {
-		var where []string
-		sep := "and"
-		formatParts := strings.SplitN(formats, ":", 2)
-		if len(formatParts) > 1 {
-			sep = formatParts[0]
-			formats = formatParts[1]
-		}
-		where, args_ = c.AppendWheref(nil, args_, formats, formatArgs...)
-		sql_ = c.joinWhere(caller+1, sql, where, sep)
+	if len(formats) < 1 {
+		return
 	}
+	var where []string
+	sep := "and"
+	formatParts := strings.SplitN(formats, "#", 2)
+	if len(formatParts) > 1 {
+		optionParts := strings.Split(formatParts[1], ",")
+		for _, part := range optionParts {
+			if strings.HasPrefix(part, "+") {
+				sep = strings.TrimPrefix(part, "+")
+				break
+			}
+		}
+	}
+	where, args_ = c.AppendWheref(nil, args_, formats, formatArgs...)
+	sql_ = c.joinWhere(caller+1, sql, where, sep)
 	return
 }
 

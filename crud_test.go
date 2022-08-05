@@ -994,7 +994,7 @@ func testJoinWhere(t *testing.T, queryer Queryer) {
 		}
 	}
 	{
-		querySQL, args := JoinWheref(sql, nil, "or:tid=$%v", object.TID)
+		querySQL, args := JoinWheref(sql, nil, "tid=$%v#+or", object.TID)
 		fmt.Println("JoinWhere-->", querySQL, args)
 		var result *CrudObject
 		err = QueryRow(queryer, context.Background(), object, "#all", querySQL, args, &result)
@@ -1004,7 +1004,7 @@ func testJoinWhere(t *testing.T, queryer Queryer) {
 		}
 	}
 	{
-		querySQL, args := Default.JoinWheref(sql, nil, "or:tid=$%v", object.TID)
+		querySQL, args := Default.JoinWheref(sql, nil, "tid=$%v#+or", object.TID)
 		fmt.Println("JoinWhere-->", querySQL, args)
 		var result *CrudObject
 		err = QueryRow(queryer, context.Background(), object, "#all", querySQL, args, &result)
