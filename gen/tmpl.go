@@ -274,13 +274,25 @@ func Find{{.Struct.Name}}Wheref(ctx context.Context, format string, args ...inte
 
 //Find{{.Struct.Name}}WherefCall will find {{.Struct.Table.Name}} by where from database
 func Find{{.Struct.Name}}WherefCall(caller interface{}, ctx context.Context, lock bool, format string, args ...interface{}) ({{.Arg.Name}} *{{.Struct.Name}}, err error) {
-	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Find}}")
+	{{.Arg.Name}}, err = Find{{.Struct.Name}}FilterWherefCall(GetQueryer, ctx, lock, "{{.Filter.Find}}", format, args...)
+	return
+}
+
+//Find{{.Struct.Name}}FilterWheref will find {{.Struct.Table.Name}} by where from database
+func Find{{.Struct.Name}}FilterWheref(ctx context.Context, filter string, format string, args ...interface{}) ({{.Arg.Name}} *{{.Struct.Name}}, err error) {
+	{{.Arg.Name}}, err = Find{{.Struct.Name}}FilterWherefCall(GetQueryer, ctx, false, filter, format, args...)
+	return
+}
+
+//Find{{.Struct.Name}}FilterWherefCall will find {{.Struct.Table.Name}} by where from database
+func Find{{.Struct.Name}}FilterWherefCall(caller interface{}, ctx context.Context, lock bool, filter string, format string, args ...interface{}) ({{.Arg.Name}} *{{.Struct.Name}}, err error) {
+	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, filter)
 	where, queryArgs := crud.AppendWheref(nil, nil, format, args...)
 	querySQL = crud.JoinWhere(querySQL, where, "and")
 	if lock {
 		querySQL += " {{.Code.RowLock}} "
 	}
-	err = crud.QueryRow(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Find}}", querySQL, queryArgs, &{{.Arg.Name}})
+	err = crud.QueryRow(caller, ctx, &{{.Struct.Name}}{}, filter, querySQL, queryArgs, &{{.Arg.Name}})
 	return
 }
 
@@ -300,6 +312,22 @@ func List{{.Struct.Name}}ByIDCall(caller interface{}, ctx context.Context, {{.Ar
 	return
 }
 
+//List{{.Struct.Name}}FilterByID will list {{.Struct.Table.Name}} by id from database
+func List{{.Struct.Name}}FilterByID(ctx context.Context, filter string, {{.Arg.Name}}IDs ...{{PrimaryField .Struct "Type"}}) ({{.Arg.Name}}List []*{{.Struct.Name}}, {{.Arg.Name}}Map map[{{PrimaryField .Struct "Type"}}]*{{.Struct.Name}}, err error) {
+	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}FilterByIDCall(GetQueryer, ctx, filter, {{.Arg.Name}}IDs...)
+	return
+}
+
+//List{{.Struct.Name}}FilterByIDCall will list {{.Struct.Table.Name}} by id from database
+func List{{.Struct.Name}}FilterByIDCall(caller interface{}, ctx context.Context, filter string, {{.Arg.Name}}IDs ...{{PrimaryField .Struct "Type"}}) ({{.Arg.Name}}List []*{{.Struct.Name}}, {{.Arg.Name}}Map map[{{PrimaryField .Struct "Type"}}]*{{.Struct.Name}}, err error) {
+	if len({{.Arg.Name}}IDs) < 1 {
+		{{.Arg.Name}}Map = map[{{PrimaryField .Struct "Type"}}]*{{.Struct.Name}}{}
+		return
+	}
+	err = Scan{{.Struct.Name}}FilterByIDCall(caller, ctx, filter, {{.Arg.Name}}IDs, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryField .Struct "Column"}}")
+	return
+}
+
 //Scan{{.Struct.Name}}ByID will list {{.Struct.Table.Name}} by id from database
 func Scan{{.Struct.Name}}ByID(ctx context.Context, {{.Arg.Name}}IDs []{{PrimaryField .Struct "Type"}}, dest ...interface{}) (err error) {
 	err = Scan{{.Struct.Name}}ByIDCall(GetQueryer, ctx, {{.Arg.Name}}IDs, dest...)
@@ -308,28 +336,52 @@ func Scan{{.Struct.Name}}ByID(ctx context.Context, {{.Arg.Name}}IDs []{{PrimaryF
 
 //Scan{{.Struct.Name}}ByIDCall will list {{.Struct.Table.Name}} by id from database
 func Scan{{.Struct.Name}}ByIDCall(caller interface{}, ctx context.Context, {{.Arg.Name}}IDs []{{PrimaryField .Struct "Type"}}, dest ...interface{}) (err error) {
-	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Scan}}")
-	where := append([]string{}, fmt.Sprintf("{{PrimaryField .Struct "Column"}} in (%v)", {{PrimaryField .Struct "TypeArray"}}({{.Arg.Name}}IDs).InArray()))
-	querySQL = crud.JoinWhere(querySQL, where, " and ")
-	err = crud.Query(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Scan}}", querySQL, nil, dest...)
+	err = Scan{{.Struct.Name}}FilterByIDCall(caller, ctx, "{{.Filter.Scan}}", {{.Arg.Name}}IDs, dest...)
 	return
 }
 
-//Scan{{.Struct.Name}} will list {{.Struct.Table.Name}} by format from database
+//Scan{{.Struct.Name}}FilterByID will list {{.Struct.Table.Name}} by id from database
+func Scan{{.Struct.Name}}FilterByID(ctx context.Context, filter string, {{.Arg.Name}}IDs []{{PrimaryField .Struct "Type"}}, dest ...interface{}) (err error) {
+	err = Scan{{.Struct.Name}}FilterByIDCall(GetQueryer, ctx, filter, {{.Arg.Name}}IDs, dest...)
+	return
+}
+
+//Scan{{.Struct.Name}}FilterByIDCall will list {{.Struct.Table.Name}} by id from database
+func Scan{{.Struct.Name}}FilterByIDCall(caller interface{}, ctx context.Context, filter string, {{.Arg.Name}}IDs []{{PrimaryField .Struct "Type"}}, dest ...interface{}) (err error) {
+	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, filter)
+	where := append([]string{}, fmt.Sprintf("{{PrimaryField .Struct "Column"}} in (%v)", {{PrimaryField .Struct "TypeArray"}}({{.Arg.Name}}IDs).InArray()))
+	querySQL = crud.JoinWhere(querySQL, where, " and ")
+	err = crud.Query(caller, ctx, &{{.Struct.Name}}{}, filter, querySQL, nil, dest...)
+	return
+}
+
+//Scan{{.Struct.Name}}WherefCall will list {{.Struct.Table.Name}} by format from database
 func Scan{{.Struct.Name}}Wheref(ctx context.Context, format string, args []interface{}, dest ...interface{}) (err error) {
 	err = Scan{{.Struct.Name}}WherefCall(GetQueryer, ctx, format, args, dest...)
 	return
 }
 
-//Scan{{.Struct.Name}}Call will list {{.Struct.Table.Name}} by format from database
+//Scan{{.Struct.Name}}WherefCall will list {{.Struct.Table.Name}} by format from database
 func Scan{{.Struct.Name}}WherefCall(caller interface{}, ctx context.Context, format string, args []interface{}, dest ...interface{}) (err error) {
-	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Scan}}")
+	err = Scan{{.Struct.Name}}FilterWherefCall(caller, ctx, "{{.Filter.Scan}}", format, args, dest...)
+	return
+}
+
+//Scan{{.Struct.Name}}FilterWheref will list {{.Struct.Table.Name}} by format from database
+func Scan{{.Struct.Name}}FilterWheref(ctx context.Context, filter string, format string, args []interface{}, dest ...interface{}) (err error) {
+	err = Scan{{.Struct.Name}}FilterWherefCall(GetQueryer, ctx, filter, format, args, dest...)
+	return
+}
+
+//Scan{{.Struct.Name}}FilterWherefCall will list {{.Struct.Table.Name}} by format from database
+func Scan{{.Struct.Name}}FilterWherefCall(caller interface{}, ctx context.Context, filter string, format string, args []interface{}, dest ...interface{}) (err error) {
+	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, filter)
 	var where []string
 	if len(format) > 0 {
 		where, args = crud.AppendWheref(nil, nil, format, args...)
 	}
 	querySQL = crud.JoinWhere(querySQL, where, " and ")
-	err = crud.Query(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Scan}}", querySQL, args, dest...)
+	err = crud.Query(caller, ctx, &{{.Struct.Name}}{}, filter, querySQL, args, dest...)
 	return
 }
 
@@ -433,6 +485,15 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		t.Error("find id error")
 		return
 	}
+	find{{.Struct.Name}}, err = Find{{.Struct.Name}}FilterWheref(context.Background(), "#all", "{{PrimaryField .Struct "Column"}}=$%v", {{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if {{.Arg.Name}}.{{PrimaryField .Struct "Name"}} != find{{.Struct.Name}}.{{PrimaryField .Struct "Name"}} {
+		t.Error("find id error")
+		return
+	}
 	find{{.Struct.Name}}, err = Find{{.Struct.Name}}WhereCall(GetQueryer, context.Background(), true, "and", []string{"{{PrimaryField .Struct "Column"}}=$1"}, []interface{}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}{{"}"}})
 	if err != nil {
 		t.Error(err)
@@ -465,6 +526,20 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		t.Error("list id error")
 		return
 	}
+	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}FilterByID(context.Background(), "#all")
+	if err != nil || len({{.Arg.Name}}List) > 0 || {{.Arg.Name}}Map == nil || len({{.Arg.Name}}Map) > 0 {
+		t.Error(err)
+		return
+	}
+	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}FilterByID(context.Background(), "#all", {{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len({{.Arg.Name}}List) != 1 || {{.Arg.Name}}List[0].{{PrimaryField .Struct "Name"}} != {{.Arg.Name}}.{{PrimaryField .Struct "Name"}} || len({{.Arg.Name}}Map) != 1 || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}] == nil || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}].{{PrimaryField .Struct "Name"}} != {{.Arg.Name}}.{{PrimaryField .Struct "Name"}} {
+		t.Error("list id error")
+		return
+	}
 	{{.Arg.Name}}List = nil
 	{{.Arg.Name}}Map = nil
 	err = Scan{{.Struct.Name}}ByID(context.Background(), []{{PrimaryField .Struct "Type"}}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryField .Struct "Column"}}")
@@ -478,7 +553,29 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 	}
 	{{.Arg.Name}}List = nil
 	{{.Arg.Name}}Map = nil
+	err = Scan{{.Struct.Name}}FilterByID(context.Background(), "#all", []{{PrimaryField .Struct "Type"}}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryField .Struct "Column"}}")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len({{.Arg.Name}}List) != 1 || {{.Arg.Name}}List[0].{{PrimaryField .Struct "Name"}} != {{.Arg.Name}}.{{PrimaryField .Struct "Name"}} || len({{.Arg.Name}}Map) != 1 || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}] == nil || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}].{{PrimaryField .Struct "Name"}} != {{.Arg.Name}}.{{PrimaryField .Struct "Name"}} {
+		t.Error("list id error")
+		return
+	}
+	{{.Arg.Name}}List = nil
+	{{.Arg.Name}}Map = nil
 	err = Scan{{.Struct.Name}}Wheref(context.Background(), "{{PrimaryField .Struct "Column"}}=$%v", []interface{}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryField .Struct "Column"}}")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len({{.Arg.Name}}List) != 1 || {{.Arg.Name}}List[0].{{PrimaryField .Struct "Name"}} != {{.Arg.Name}}.{{PrimaryField .Struct "Name"}} || len({{.Arg.Name}}Map) != 1 || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}] == nil || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}].{{PrimaryField .Struct "Name"}} != {{.Arg.Name}}.{{PrimaryField .Struct "Name"}} {
+		t.Error("list id error")
+		return
+	}
+	{{.Arg.Name}}List = nil
+	{{.Arg.Name}}Map = nil
+	err = Scan{{.Struct.Name}}FilterWheref(context.Background(), "#all", "{{PrimaryField .Struct "Column"}}=$%v", []interface{}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}{{"}"}}, &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryField .Struct "Column"}}")
 	if err != nil {
 		t.Error(err)
 		return
