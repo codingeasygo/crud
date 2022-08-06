@@ -257,12 +257,12 @@ func Find{{.Struct.Name}}Call(caller interface{}, ctx context.Context, {{.Arg.Na
 
 //Find{{.Struct.Name}}WhereCall will find {{.Struct.Table.Name}} by where from database
 func Find{{.Struct.Name}}WhereCall(caller interface{}, ctx context.Context, lock bool, join string, where []string, args []interface{}) ({{.Arg.Name}} *{{.Struct.Name}}, err error) {
-	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Query}}")
+	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Find}}")
 	querySQL = crud.JoinWhere(querySQL, where, join)
 	if lock {
 		querySQL += " {{.Code.RowLock}} "
 	}
-	err = crud.QueryRow(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Query}}", querySQL, args, &{{.Arg.Name}})
+	err = crud.QueryRow(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Find}}", querySQL, args, &{{.Arg.Name}})
 	return
 }
 
@@ -274,13 +274,13 @@ func Find{{.Struct.Name}}Wheref(ctx context.Context, format string, args ...inte
 
 //Find{{.Struct.Name}}WherefCall will find {{.Struct.Table.Name}} by where from database
 func Find{{.Struct.Name}}WherefCall(caller interface{}, ctx context.Context, lock bool, format string, args ...interface{}) ({{.Arg.Name}} *{{.Struct.Name}}, err error) {
-	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Query}}")
+	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Find}}")
 	where, queryArgs := crud.AppendWheref(nil, nil, format, args...)
 	querySQL = crud.JoinWhere(querySQL, where, "and")
 	if lock {
 		querySQL += " {{.Code.RowLock}} "
 	}
-	err = crud.QueryRow(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Query}}", querySQL, queryArgs, &{{.Arg.Name}})
+	err = crud.QueryRow(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Find}}", querySQL, queryArgs, &{{.Arg.Name}})
 	return
 }
 
@@ -308,10 +308,10 @@ func Scan{{.Struct.Name}}ByID(ctx context.Context, {{.Arg.Name}}IDs []{{PrimaryF
 
 //Scan{{.Struct.Name}}ByIDCall will list {{.Struct.Table.Name}} by id from database
 func Scan{{.Struct.Name}}ByIDCall(caller interface{}, ctx context.Context, {{.Arg.Name}}IDs []{{PrimaryField .Struct "Type"}}, dest ...interface{}) (err error) {
-	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Query}}")
+	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Scan}}")
 	where := append([]string{}, fmt.Sprintf("{{PrimaryField .Struct "Column"}} in (%v)", {{PrimaryField .Struct "TypeArray"}}({{.Arg.Name}}IDs).InArray()))
 	querySQL = crud.JoinWhere(querySQL, where, " and ")
-	err = crud.Query(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Query}}", querySQL, nil, dest...)
+	err = crud.Query(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Scan}}", querySQL, nil, dest...)
 	return
 }
 
@@ -323,13 +323,13 @@ func Scan{{.Struct.Name}}Wheref(ctx context.Context, format string, args []inter
 
 //Scan{{.Struct.Name}}Call will list {{.Struct.Table.Name}} by format from database
 func Scan{{.Struct.Name}}WherefCall(caller interface{}, ctx context.Context, format string, args []interface{}, dest ...interface{}) (err error) {
-	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Query}}")
+	querySQL := crud.QuerySQL(&{{.Struct.Name}}{}, "{{.Filter.Scan}}")
 	var where []string
 	if len(format) > 0 {
 		where, args = crud.AppendWheref(nil, nil, format, args...)
 	}
 	querySQL = crud.JoinWhere(querySQL, where, " and ")
-	err = crud.Query(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Query}}", querySQL, args, dest...)
+	err = crud.Query(caller, ctx, &{{.Struct.Name}}{}, "{{.Filter.Scan}}", querySQL, args, dest...)
 	return
 }
 
