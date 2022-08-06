@@ -28,7 +28,7 @@ const {{.Struct.Name}}OrderbyAll = "{{.Filter.Order}}"
  * {{.Struct.Name}} Fields:{{- range .Struct.Fields }}{{.Column.Name}},{{- end }}
  */
 type {{ .Struct.Name }} struct {
-	T {{.TableNameType}}  %vtable:"{{.Struct.Table.Name}}"%v /* the table name tag */
+	T {{.TableNameType}}  %vjson:"-" table:"{{.Struct.Table.Name}}"%v /* the table name tag */
 {{- range .Struct.Fields }}
 	{{ .Name }} {{FieldType $.Struct . }}  %vjson:"{{.Column.Name}},omitempty"{{FieldTags $.Struct . }}%v /* {{ .Column.Comment }} */
 {{- end }}
