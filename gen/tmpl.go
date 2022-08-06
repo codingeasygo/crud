@@ -74,6 +74,12 @@ const {{.Struct.Name}}FilterInsert = "{{.Filter.Insert}}"
 //{{.Struct.Name}}FilterUpdate is crud filter
 const {{.Struct.Name}}FilterUpdate = "{{.Filter.Update}}"
 
+//{{.Struct.Name}}FilterFind is crud filter
+const {{.Struct.Name}}FilterFind = "{{.Filter.Find}}"
+
+//{{.Struct.Name}}FilterScan is crud filter
+const {{.Struct.Name}}FilterScan = "{{.Filter.Scan}}"
+
 {{- range $i,$field := .Struct.Fields }}
 {{- if $field.Options}}
 //EnumValid will valid value by {{$.Struct.Name}}{{$field.Name}}
