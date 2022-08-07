@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"regexp"
 	"sync"
 	"testing"
@@ -16,9 +17,9 @@ var Verbose = false
 
 var mocking = false
 var mockPanic = false
-var mockTrigger = map[string][]int64{}
+var mockTrigger = map[string][]int{}
 var mockMatch = map[string]*regexp.Regexp{}
-var mockRunned = map[string]int64{}
+var mockRunned = map[string]int{}
 var mockRunnedLck = sync.RWMutex{}
 
 func mockerCheck(key, sql string) (err error) {
@@ -56,21 +57,21 @@ func MockerStop() {
 
 func MockerClear() {
 	mockRunnedLck.Lock()
-	mockTrigger = map[string][]int64{}
+	mockTrigger = map[string][]int{}
 	mockMatch = map[string]*regexp.Regexp{}
-	mockRunned = map[string]int64{}
+	mockRunned = map[string]int{}
 	mockPanic = false
 	mockRunnedLck.Unlock()
 }
 
-func mockerSet(key, match string, isPanice bool, triggers ...int64) {
+func mockerSet(key, match string, isPanice bool, triggers ...int) {
 	mockRunnedLck.Lock()
 	defer mockRunnedLck.Unlock()
 	if len(match) > 0 {
 		mockMatch[key] = regexp.MustCompile(match)
 	} else {
 		if len(triggers) == 1 {
-			mockTrigger[key] = []int64{triggers[0], triggers[0]}
+			mockTrigger[key] = []int{triggers[0], triggers[0]}
 		} else if len(triggers) > 1 {
 			mockTrigger[key] = triggers
 		} else {
@@ -83,7 +84,7 @@ func mockerSet(key, match string, isPanice bool, triggers ...int64) {
 var Log = log.New(os.Stderr, "    ", log.Llongfile)
 
 type MockerCaller struct {
-	Call       func(func(trigger int64) (res xmap.M, err error)) xmap.M
+	Call       func(func(trigger int) (res xmap.M, err error)) xmap.M
 	shouldErr  *testing.T
 	shouldArgs []interface{}
 }
@@ -133,7 +134,7 @@ func (m *MockerCaller) validResult(res xmap.M, err error) {
 
 func Should(t *testing.T, key string, v interface{}) (caller *MockerCaller) {
 	caller = &MockerCaller{}
-	caller.Should(t, key, v).Call = func(call func(trigger int64) (res xmap.M, err error)) xmap.M {
+	caller.Should(t, key, v).Call = func(call func(trigger int) (res xmap.M, err error)) xmap.M {
 		res, err := call(0)
 		caller.validResult(res, err)
 		return res
@@ -141,11 +142,31 @@ func Should(t *testing.T, key string, v interface{}) (caller *MockerCaller) {
 	return
 }
 
-func MockerSet(key string, trigger int64) {
+func rangeArgs(args []interface{}, call func(key string, trigger int)) {
+	keys := []string{}
+	triggers := []int{}
+	for i, arg := range args {
+		switch arg := arg.(type) {
+		case string:
+			keys = append(keys, arg)
+		case int:
+			triggers = append(triggers, arg)
+		default:
+			panic(fmt.Sprintf("args[%v] is %v and not supported", i, reflect.TypeOf(arg)))
+		}
+	}
+	for _, key := range keys {
+		for _, trigger := range triggers {
+			call(key, trigger)
+		}
+	}
+}
+
+func MockerSet(key string, trigger int) {
 	mockerSet(key, "", false, trigger)
 }
 
-func MockerPanic(key string, trigger int64) {
+func MockerPanic(key string, trigger int) {
 	mockerSet(key, "", true, trigger)
 }
 
@@ -157,29 +178,29 @@ func MockerMatchPanic(key, match string) {
 	mockerSet(key, match, true)
 }
 
-func MockerSetCall(key string, triggers ...int64) (caller *MockerCaller) {
+func MockerSetCall(args ...interface{}) (caller *MockerCaller) {
 	caller = &MockerCaller{}
-	caller.Call = func(call func(trigger int64) (res xmap.M, err error)) xmap.M {
-		for _, i := range triggers {
+	caller.Call = func(call func(trigger int) (res xmap.M, err error)) xmap.M {
+		rangeArgs(args, func(key string, i int) {
 			MockerSet(key, i)
 			res, err := call(i)
 			MockerClear()
 			caller.validResult(res, err)
-		}
+		})
 		return nil
 	}
 	return
 }
 
-func MockerPanicCall(key string, triggers ...int64) (caller *MockerCaller) {
+func MockerPanicCall(args ...interface{}) (caller *MockerCaller) {
 	caller = &MockerCaller{}
-	caller.Call = func(call func(trigger int64) (res xmap.M, err error)) xmap.M {
-		for _, i := range triggers {
+	caller.Call = func(call func(trigger int) (res xmap.M, err error)) xmap.M {
+		rangeArgs(args, func(key string, i int) {
 			MockerPanic(key, i)
 			res, err := call(i)
 			MockerClear()
 			caller.validResult(res, err)
-		}
+		})
 		return nil
 	}
 	return
@@ -187,7 +208,7 @@ func MockerPanicCall(key string, triggers ...int64) (caller *MockerCaller) {
 
 func MockerMatchSetCall(key, match string) (caller *MockerCaller) {
 	caller = &MockerCaller{}
-	caller.Call = func(call func(trigger int64) (res xmap.M, err error)) xmap.M {
+	caller.Call = func(call func(trigger int) (res xmap.M, err error)) xmap.M {
 		MockerMatchSet(key, match)
 		res, err := call(0)
 		MockerClear()
@@ -199,7 +220,7 @@ func MockerMatchSetCall(key, match string) (caller *MockerCaller) {
 
 func MockerMatchPanicCall(key, match string) (caller *MockerCaller) {
 	caller = &MockerCaller{}
-	caller.Call = func(call func(trigger int64) (res xmap.M, err error)) xmap.M {
+	caller.Call = func(call func(trigger int) (res xmap.M, err error)) xmap.M {
 		MockerMatchPanic(key, match)
 		res, err := call(0)
 		MockerClear()
@@ -209,9 +230,9 @@ func MockerMatchPanicCall(key, match string) (caller *MockerCaller) {
 	return
 }
 
-func MockerSetRangeCall(key string, start, end int64) (caller *MockerCaller) {
+func MockerSetRangeCall(key string, start, end int) (caller *MockerCaller) {
 	caller = &MockerCaller{}
-	caller.Call = func(call func(trigger int64) (res xmap.M, err error)) xmap.M {
+	caller.Call = func(call func(trigger int) (res xmap.M, err error)) xmap.M {
 		for i := start; i < end; i++ {
 			MockerSet(key, i)
 			res, err := call(0)
@@ -223,9 +244,9 @@ func MockerSetRangeCall(key string, start, end int64) (caller *MockerCaller) {
 	return
 }
 
-func MockerPanicRangeCall(key string, start, end int64) (caller *MockerCaller) {
+func MockerPanicRangeCall(key string, start, end int) (caller *MockerCaller) {
 	caller = &MockerCaller{}
-	caller.Call = func(call func(trigger int64) (res xmap.M, err error)) xmap.M {
+	caller.Call = func(call func(trigger int) (res xmap.M, err error)) xmap.M {
 		for i := start; i < end; i++ {
 			MockerPanic(key, i)
 			res, err := call(0)
