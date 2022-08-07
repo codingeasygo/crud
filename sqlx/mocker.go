@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"reflect"
 	"regexp"
 	"sync"
 	"testing"
 
-	"github.com/codingeasygo/util/converter"
 	"github.com/codingeasygo/util/xmap"
 )
 
@@ -85,14 +83,13 @@ func mockerSet(key, match string, isPanice bool, triggers ...int64) {
 var Log = log.New(os.Stderr, "    ", log.Llongfile)
 
 type MockerCaller struct {
-	Call      func(func(trigger int64) (res xmap.M, err error)) xmap.M
-	shouldErr *testing.T
-	shouldKey string
-	shouldVal interface{}
+	Call       func(func(trigger int64) (res xmap.M, err error)) xmap.M
+	shouldErr  *testing.T
+	shouldArgs []interface{}
 }
 
-func (m *MockerCaller) Should(t *testing.T, key string, v interface{}) *MockerCaller {
-	m.shouldErr, m.shouldKey, m.shouldVal = t, key, v
+func (m *MockerCaller) Should(t *testing.T, args ...interface{}) *MockerCaller {
+	m.shouldErr, m.shouldArgs = t, args
 	return m
 }
 
@@ -114,25 +111,12 @@ func (m *MockerCaller) validError(res xmap.M, err error) bool {
 }
 
 func (m *MockerCaller) validShould(res xmap.M, err error) bool {
-	if len(m.shouldKey) < 1 {
+	if len(m.shouldArgs) < 1 {
 		return true
 	}
-	val := res.Value(m.shouldKey)
-	if m.shouldVal == nil || val == nil {
-		if m.shouldVal == nil && val == nil {
-			return true
-		}
-		m.callError(fmt.Errorf("res.%v(%v)!=%v, result is %v", m.shouldKey, val, m.shouldVal, converter.JSON(res)))
-		return false
-	}
-	resultValue := reflect.ValueOf(val)
-	if !resultValue.CanConvert(reflect.TypeOf(m.shouldVal)) {
-		m.callError(fmt.Errorf("res.%v(%v)!=%v, result is %v", m.shouldKey, val, m.shouldVal, converter.JSON(res)))
-		return false
-	}
-	targetValue := resultValue.Convert(reflect.TypeOf(m.shouldVal))
-	if !reflect.DeepEqual(targetValue, m.shouldVal) {
-		m.callError(fmt.Errorf("res.%v(%v)!=%v, result is %v", m.shouldKey, val, m.shouldVal, converter.JSON(res)))
+	xerr := res.Should(m.shouldArgs...)
+	if xerr != nil {
+		m.callError(xerr)
 		return false
 	}
 	return true
