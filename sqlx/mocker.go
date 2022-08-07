@@ -87,6 +87,7 @@ type MockerCaller struct {
 	Call       func(func(trigger int) (res xmap.M, err error)) xmap.M
 	shouldErr  *testing.T
 	shouldArgs []interface{}
+	onlyLog    bool
 }
 
 func (m *MockerCaller) Should(t *testing.T, args ...interface{}) *MockerCaller {
@@ -94,41 +95,47 @@ func (m *MockerCaller) Should(t *testing.T, args ...interface{}) *MockerCaller {
 	return m
 }
 
-func (m *MockerCaller) callError(err error) {
+func (m *MockerCaller) OnlyLog(only bool) *MockerCaller {
+	m.onlyLog = only
+	return m
+}
+
+func (m *MockerCaller) callError(depth int, err error) {
 	if m.shouldErr == nil {
 		panic(err)
-	} else {
-		Log.Output(5, err.Error())
+	}
+	Log.Output(depth, err.Error())
+	if !m.onlyLog {
 		m.shouldErr.Fail()
 		m.shouldErr.SkipNow()
 	}
 }
 
-func (m *MockerCaller) validError(res xmap.M, err error) bool {
+func (m *MockerCaller) validError(depth int, res xmap.M, err error) bool {
 	if err != nil {
-		m.callError(err)
+		m.callError(depth+1, err)
 		return false
 	}
 	return true
 }
 
-func (m *MockerCaller) validShould(res xmap.M, err error) bool {
+func (m *MockerCaller) validShould(depth int, res xmap.M, err error) bool {
 	if len(m.shouldArgs) < 1 {
 		return true
 	}
 	xerr := res.Should(m.shouldArgs...)
 	if xerr != nil {
-		m.callError(xerr)
+		m.callError(depth+1, xerr)
 		return false
 	}
 	return true
 }
 
-func (m *MockerCaller) validResult(res xmap.M, err error) {
-	if !m.validError(res, err) {
+func (m *MockerCaller) validResult(depth int, res xmap.M, err error) {
+	if !m.validError(depth+1, res, err) {
 		return
 	}
-	if !m.validShould(res, err) {
+	if !m.validShould(depth+1, res, err) {
 		return
 	}
 }
@@ -137,7 +144,7 @@ func Should(t *testing.T, key string, v interface{}) (caller *MockerCaller) {
 	caller = &MockerCaller{}
 	caller.Should(t, key, v).Call = func(call func(trigger int) (res xmap.M, err error)) xmap.M {
 		res, err := call(0)
-		caller.validResult(res, err)
+		caller.validResult(3, res, err)
 		return res
 	}
 	return
@@ -186,7 +193,7 @@ func MockerSetCall(args ...interface{}) (caller *MockerCaller) {
 			MockerSet(key, i)
 			res, err := call(i)
 			MockerClear()
-			caller.validResult(res, err)
+			caller.validResult(5, res, err)
 		})
 		return nil
 	}
@@ -200,7 +207,7 @@ func MockerPanicCall(args ...interface{}) (caller *MockerCaller) {
 			MockerPanic(key, i)
 			res, err := call(i)
 			MockerClear()
-			caller.validResult(res, err)
+			caller.validResult(5, res, err)
 		})
 		return nil
 	}
@@ -213,7 +220,7 @@ func MockerMatchSetCall(key, match string) (caller *MockerCaller) {
 		MockerMatchSet(key, match)
 		res, err := call(0)
 		MockerClear()
-		caller.validResult(res, err)
+		caller.validResult(3, res, err)
 		return res
 	}
 	return
@@ -225,7 +232,7 @@ func MockerMatchPanicCall(key, match string) (caller *MockerCaller) {
 		MockerMatchPanic(key, match)
 		res, err := call(0)
 		MockerClear()
-		caller.validResult(res, err)
+		caller.validResult(3, res, err)
 		return res
 	}
 	return
@@ -238,7 +245,7 @@ func MockerSetRangeCall(key string, start, end int) (caller *MockerCaller) {
 			MockerSet(key, i)
 			res, err := call(0)
 			MockerClear()
-			caller.validResult(res, err)
+			caller.validResult(3, res, err)
 		}
 		return nil
 	}
@@ -252,7 +259,7 @@ func MockerPanicRangeCall(key string, start, end int) (caller *MockerCaller) {
 			MockerPanic(key, i)
 			res, err := call(0)
 			MockerClear()
-			caller.validResult(res, err)
+			caller.validResult(3, res, err)
 		}
 		return nil
 	}
