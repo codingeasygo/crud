@@ -100,6 +100,7 @@ func (m *MockerCaller) callError(err error) {
 	} else {
 		Log.Output(5, err.Error())
 		m.shouldErr.Fail()
+		m.shouldErr.SkipNow()
 	}
 }
 
