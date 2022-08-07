@@ -75,12 +75,16 @@ func mockerSet(key, match string, isPanice bool, triggers ...int64) {
 	mockPanic = isPanice
 }
 
-func MockerSet(key string, triggers ...int64) {
-	mockerSet(key, "", false, triggers...)
+type MockerCaller struct {
+	Call func(func(trigger int64))
 }
 
-func MockerPanic(key string, triggers ...int64) {
-	mockerSet(key, "", true, triggers...)
+func MockerSet(key string, trigger int64) {
+	mockerSet(key, "", false, trigger)
+}
+
+func MockerPanic(key string, trigger int64) {
+	mockerSet(key, "", true, trigger)
 }
 
 func MockerMatchSet(key, match string) {
@@ -89,4 +93,72 @@ func MockerMatchSet(key, match string) {
 
 func MockerMatchPanic(key, match string) {
 	mockerSet(key, match, true)
+}
+
+func MockerSetCall(key string, triggers ...int64) MockerCaller {
+	return MockerCaller{
+		Call: func(call func(trigger int64)) {
+			for _, i := range triggers {
+				MockerSet(key, i)
+				call(i)
+				MockerClear()
+			}
+		},
+	}
+}
+
+func MockerMatchSetCall(key, match string) MockerCaller {
+	return MockerCaller{
+		Call: func(call func(trigger int64)) {
+			MockerMatchSet(key, match)
+			defer MockerClear()
+			call(0)
+		},
+	}
+}
+
+func MockerMatchPanicCall(key, match string) MockerCaller {
+	return MockerCaller{
+		Call: func(call func(trigger int64)) {
+			MockerMatchPanic(key, match)
+			defer MockerClear()
+			call(0)
+		},
+	}
+}
+
+func MockerPanicCall(key string, triggers ...int64) MockerCaller {
+	return MockerCaller{
+		Call: func(call func(trigger int64)) {
+			for _, i := range triggers {
+				MockerPanic(key, i)
+				call(i)
+				MockerClear()
+			}
+		},
+	}
+}
+
+func MockerSetRangeCall(key string, start, end int64) MockerCaller {
+	return MockerCaller{
+		Call: func(call func(trigger int64)) {
+			for i := start; i < end; i++ {
+				MockerSet(key, i)
+				call(i)
+				MockerClear()
+			}
+		},
+	}
+}
+
+func MockerPanicRangeCall(key string, start, end int64) MockerCaller {
+	return MockerCaller{
+		Call: func(call func(trigger int64)) {
+			for i := start; i < end; i++ {
+				MockerPanic(key, i)
+				call(i)
+				MockerClear()
+			}
+		},
+	}
 }
