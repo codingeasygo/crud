@@ -151,19 +151,27 @@ func Should(t *testing.T, key string, v interface{}) (caller *MockerCaller) {
 }
 
 func rangeArgs(args []interface{}, call func(key string, trigger int)) {
-	keys := []string{}
-	triggers := []int{}
+	triggerAll := map[string][]int{}
+	triggerKeys := []string{}
+	triggerAdd := false
 	for i, arg := range args {
 		switch arg := arg.(type) {
 		case string:
-			keys = append(keys, arg)
+			if triggerAdd {
+				triggerKeys = []string{}
+			}
+			triggerAdd = false
+			triggerKeys = append(triggerKeys, arg)
 		case int:
-			triggers = append(triggers, arg)
+			triggerAdd = true
+			for _, key := range triggerKeys {
+				triggerAll[key] = append(triggerAll[key], arg)
+			}
 		default:
 			panic(fmt.Sprintf("args[%v] is %v and not supported", i, reflect.TypeOf(arg)))
 		}
 	}
-	for _, key := range keys {
+	for key, triggers := range triggerAll {
 		for _, trigger := range triggers {
 			call(key, trigger)
 		}
