@@ -508,12 +508,12 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 			fieldUpdate = strings.Join(parts, ",")
 			fieldUpdateValue = xsql.AsStringArray(strings.SplitN(fieldUpdate, "#", 2)[0])
 		}
-		if len(fieldFind) < 1 {
-			fieldFind = "#all"
-		}
-		if len(fieldScan) < 1 {
-			fieldScan = "#all"
-		}
+	}
+	if len(fieldFind) < 1 {
+		fieldFind = "#all"
+	}
+	if len(fieldScan) < 1 {
+		fieldScan = "#all"
 	}
 	fieldUpdateAll := []*Field{}
 	for _, field := range s.Fields {
