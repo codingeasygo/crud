@@ -533,7 +533,7 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 		"Optional": fieldOptional,
 		"Required": fieldRequired,
 		"Insert":   fieldInsert,
-		"Update":   strings.TrimPrefix(fieldUpdate+",update_time", ","),
+		"Update":   strings.TrimSuffix("update_time,"+fieldUpdate, ","),
 		"Order":    fieldOrder,
 		"Find":     fieldFind,
 		"Scan":     fieldScan,
