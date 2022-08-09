@@ -188,13 +188,12 @@ func ({{.Arg.Name}} *{{.Struct.Name}}) UpdateFilterWheref(caller interface{}, ct
 	{{- if .Update.UpdateTime}}
 	{{.Arg.Name}}.UpdateTime = xsql.TimeNow()
 	{{- end}}
-	whereAll := []string{"{{PrimaryField .Struct "Column"}}=$%v"}
-	whereArg := []interface{}{{"{"}}{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}}
+	sql, args := crud.UpdateSQL({{.Arg.Name}}, filter, nil)
+	where, args := crud.AppendWhere(nil, args, true, "tid=$%v", {{.Arg.Name}}.TID)
 	if len(formats) > 0 {
-		whereAll = append(whereAll, formats)
-		whereArg = append(whereArg, formatArgs...)
+		where, args = crud.AppendWheref(where, args, formats, formatArgs...)
 	}
-	err = crud.UpdateRowWheref(caller, ctx, {{.Arg.Name}}, filter, strings.Join(whereAll, ","), whereArg...)
+	err = crud.UpdateRow(caller, ctx, {{.Arg.Name}}, sql, where, "and", args)
 	return
 }
 
