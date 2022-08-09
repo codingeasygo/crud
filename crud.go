@@ -427,10 +427,13 @@ func AppendWhereUnify(where []string, args []interface{}, v interface{}) (where_
 }
 
 func (c *CRUD) AppendWhereUnify(where []string, args []interface{}, v interface{}) (where_ []string, args_ []interface{}) {
+	where_, args_ = where, args
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	modelValue := reflectValue.FieldByName("Where")
+	if !modelValue.IsValid() {
+		return
+	}
 	modelType, _ := reflectValue.Type().FieldByName("Where")
-	where_, args_ = where, args
 	filterWhere, filterArgs := c.FilterWhere(args, modelValue.Addr().Interface(), modelType.Tag.Get("filter"))
 	where_ = append(where_, filterWhere...)
 	args_ = append(args_, filterArgs...)
@@ -567,9 +570,10 @@ func (c *CRUD) joinPageUnify(caller int, sql string, v interface{}) (sql_ string
 		}
 	}
 	offset := 0
-	offsetValue := pageValue.FieldByName("Offset")
-	if offsetValue.IsValid() {
+	if offsetValue := pageValue.FieldByName("Offset"); offsetValue.IsValid() {
 		offset = int(offsetValue.Int())
+	} else if skipValue := pageValue.FieldByName("Skip"); skipValue.IsValid() {
+		offset = int(skipValue.Int())
 	}
 	limit := 0
 	limitValue := pageValue.FieldByName("Limit")

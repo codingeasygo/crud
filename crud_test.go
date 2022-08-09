@@ -1711,6 +1711,44 @@ type SearchCrudObjectUnify struct {
 	} `json:"count" filter:"count(tid),max(user_id)#all"`
 }
 
+type SearchCrudObjectUnifySkip struct {
+	Model CrudObject `json:"model"`
+	Where struct {
+		UserID int64          `json:"user_id"`
+		Type   CrudObjectType `json:"type" filter:"#all"`
+		Key    struct {
+			Title string `json:"title" cmp:"title like $%v"`
+			Data  string `json:"data" cmp:"data::text like $%v"`
+		} `json:"key" join:"or"`
+		Status CrudObjectStatusArray `json:"status" cmp:"status=any($%v)"`
+		Ignore int                   `json:"ignore" cmp:"-" filter:"#all"`
+	} `json:"where" join:"and"`
+	Page struct {
+		Order string `json:"order" default:"order by tid desc"`
+		Skip  int    `json:"skip"`
+		Limit int    `json:"limit"`
+	} `json:"page"`
+	Query struct {
+		Enabled bool          `json:"enabled" scan:"-"`
+		Objects []*CrudObject `json:"objects"`
+		UserIDs []int64       `json:"user_ids" scan:"user_id#all"`
+	} `json:"query" filter:"#all"`
+	Count struct {
+		Enabled bool  `json:"enabled" scan:"-"`
+		All     int64 `json:"all" scan:"tid"`
+		UserID  int64 `json:"user_id" scan:"user_id"`
+	} `json:"count" filter:"count(tid),max(user_id)#all"`
+}
+
+type SearchCrudObjectUnifyMini struct {
+	Model CrudObject `json:"model"`
+	Query struct {
+		Enabled bool          `json:"enabled" scan:"-"`
+		Objects []*CrudObject `json:"objects"`
+		UserIDs []int64       `json:"user_ids" scan:"user_id#all"`
+	} `json:"query" filter:"#all"`
+}
+
 type FindCrudObjectUnify struct {
 	Model CrudObject `json:"model"`
 	Where struct {
@@ -1785,6 +1823,24 @@ func testUnify(t *testing.T, queryer Queryer) {
 		search.Page.Limit = 100
 		return search
 	}
+	newSkip := func() *SearchCrudObjectUnifySkip {
+		search := &SearchCrudObjectUnifySkip{}
+		search.Where.UserID = 100
+		search.Where.Type = CrudObjectTypeA
+		search.Where.Key.Title = "%a%"
+		search.Where.Key.Data = "%a%"
+		search.Where.Status = CrudObjectStatusShow
+		search.Query.Enabled = true
+		search.Count.Enabled = true
+		search.Page.Skip = 100
+		search.Page.Limit = 100
+		return search
+	}
+	newMin := func() *SearchCrudObjectUnifyMini {
+		search := &SearchCrudObjectUnifyMini{}
+		search.Query.Enabled = true
+		return search
+	}
 	newFind := func() *FindCrudObjectUnify {
 		find := &FindCrudObjectUnify{}
 		find.Where.UserID = 100
@@ -1816,6 +1872,18 @@ func testUnify(t *testing.T, queryer Queryer) {
 		search := newSearch()
 		err = ApplyUnify(queryer, context.Background(), search)
 		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
+		skip := newSkip()
+		err = ApplyUnify(queryer, context.Background(), skip)
+		if err != nil || len(skip.Query.Objects) > 0 || len(skip.Query.UserIDs) > 0 || skip.Count.All < 1 || skip.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
+		min := newMin()
+		err = ApplyUnify(queryer, context.Background(), min)
+		if err != nil || len(min.Query.Objects) < 1 || len(min.Query.UserIDs) < 1 {
 			t.Error(err)
 			return
 		}
