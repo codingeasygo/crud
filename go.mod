@@ -3,7 +3,7 @@ module github.com/codingeasygo/crud
 go 1.18
 
 require (
-	github.com/codingeasygo/util v0.0.0-20220807075639-c07357b58101
+	github.com/codingeasygo/util v0.0.0-20220811075942-8ab66374211c
 	github.com/jackc/pgconn v1.12.1
 	github.com/jackc/pgx/v4 v4.16.1
 	github.com/lib/pq v1.10.6
