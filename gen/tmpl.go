@@ -433,7 +433,9 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		return
 	}
 	{{.Arg.Name}} := &{{.Struct.Name}}{}
+	{{- if .GenValid}}
 	{{.Arg.Name}}.Valid()
+	{{- end}}
 	{{.Test.Defaults}}
 	table, fields := {{.Arg.Name}}.Meta()
 	if len(table) < 1 || len(fields) < 1 {
@@ -458,7 +460,9 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		t.Error("not id")
 		return
 	}
+	{{- if .GenValid}}
 	{{.Arg.Name}}.Valid()
+	{{- end}}
 	err = Update{{.Struct.Name}}Filter(context.Background(), {{.Arg.Name}}, "")
 	if err != nil {
 		t.Error(err)
