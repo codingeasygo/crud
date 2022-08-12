@@ -274,6 +274,7 @@ type AutoGen struct {
 	Comments      map[string]map[string]string
 	TableGenAdd   xsql.StringArray
 	TableRetAdd   map[string]string
+	TableNotValid xsql.StringArray
 	TableInclude  xsql.StringArray
 	TableExclude  xsql.StringArray
 	TableNameType string
@@ -442,6 +443,9 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 	if g.TableGenAdd == nil {
 		g.TableGenAdd = xsql.StringArray{}
 	}
+	if g.TableNotValid == nil {
+		g.TableNotValid = xsql.StringArray{}
+	}
 	if g.CodeSlice == nil {
 		g.CodeSlice = map[string]string{
 			"RowLock": "",
@@ -467,6 +471,7 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 		"Struct":        s,
 		"Code":          g.CodeSlice,
 		"GetQueryer":    g.GetQueryer,
+		"GenValid":      !g.TableNotValid.HavingOne(table.Name),
 	}
 	fieldOptional := ""
 	fieldRequired := ""

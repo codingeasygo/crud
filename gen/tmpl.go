@@ -150,6 +150,7 @@ func ({{.Arg.Name}} *{{.Struct.Name}}) Meta() (table string, fileds []string) {
 	return
 }
 
+{{- if .GenValid}}
 //Valid will valid by filter
 func ({{.Arg.Name}} *{{.Struct.Name}}) Valid() (err error) {
 	if reflect.ValueOf({{.Arg.Name}}.{{PrimaryField .Struct "Name"}}).IsZero() {
@@ -159,6 +160,7 @@ func ({{.Arg.Name}} *{{.Struct.Name}}) Valid() (err error) {
 	}
 	return
 }
+{{- end}}
 
 //Insert will add {{.Struct.Table.Name}} to database
 func ({{.Arg.Name}} *{{.Struct.Name}}) Insert(caller interface{}, ctx context.Context) (err error) {
