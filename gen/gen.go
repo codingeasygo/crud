@@ -375,6 +375,13 @@ func (g *AutoGen) FieldTags(s *Struct, field *Field) (allTag string) {
 	addTag := func(format string, args ...interface{}) {
 		tags = append(tags, fmt.Sprintf(format, args...))
 	}
+	var fieldOptionalValue = xsql.StringArray{}
+	if fieldConfig := g.FieldFilter[s.Table.Name]; len(fieldConfig) > 0 {
+		fieldOptional := fieldConfig[FieldsOptional]
+		if len(fieldOptional) > 0 {
+			fieldOptionalValue = xsql.AsStringArray(strings.SplitN(fieldOptional, "#", 2)[0])
+		}
+	}
 	func() { //valid
 		if len(field.Options) > 0 {
 			if field.Type == "string" {
@@ -384,19 +391,23 @@ func (g *AutoGen) FieldTags(s *Struct, field *Field) (allTag string) {
 			}
 			return
 		}
+		required := "r"
+		if fieldOptionalValue.HavingOne(field.Column.Name) {
+			required = "o"
+		}
 		switch field.Type {
 		case "int", "int64", "*int", "*int64":
-			addTag(`valid:"%v,r|i,r:0;"`, field.Column.Name)
+			addTag(`valid:"%v,%v|i,r:0;"`, field.Column.Name, required)
 		case "string", "*string", "xsql.M":
 			if field.Column.Name == "phone" {
-				addTag(`valid:"%v,r|s,p:^\\d{11}$;"`, field.Column.Name)
+				addTag(`valid:"%v,%v|s,p:^\\d{11}$;"`, field.Column.Name, required)
 			} else {
-				addTag(`valid:"%v,r|s,l:0;"`, field.Column.Name)
+				addTag(`valid:"%v,%v|s,l:0;"`, field.Column.Name, required)
 			}
 		case "decimal.Decimal":
-			addTag(`valid:"%v,r|f,r:0;"`, field.Column.Name)
+			addTag(`valid:"%v,%v|f,r:0;"`, field.Column.Name, required)
 		case "xsql.Time":
-			addTag(`valid:"%v,r|i,r:1;"`, field.Column.Name)
+			addTag(`valid:"%v,%v|i,r:1;"`, field.Column.Name, required)
 		}
 	}()
 	if len(tags) > 0 {
