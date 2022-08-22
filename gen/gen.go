@@ -561,7 +561,11 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 	{
 
 		defaults := ""
+		typeFields := g.TypeField[table.Name]
 		for _, field := range s.Fields {
+			if len(typeFields) > 0 && len(typeFields[field.Column.Name]) > 0 {
+				continue
+			}
 			switch field.Type {
 			case "xsql.Time":
 				if field.Column.Name == "create_time" || field.Column.Name == "update_time" {
