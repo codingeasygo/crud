@@ -11,6 +11,7 @@ import (
 
 	"github.com/codingeasygo/crud/gen"
 	"github.com/codingeasygo/crud/testsql"
+	"github.com/codingeasygo/util/xmap"
 	"github.com/codingeasygo/util/xsql"
 	"github.com/jackc/pgx/v4"
 )
@@ -184,4 +185,13 @@ func TestQueryer(t *testing.T) {
 	}
 	rows.Close()
 	tx.QueryRow(context.Background(), "select 1")
+}
+
+func TestMocker(t *testing.T) {
+	MockerStart()
+	defer MockerStop()
+	MockerSetCall("Pool.Exec", 1).ShouldError(t).Call(func(trigger int) (res xmap.M, err error) {
+		_, err = Pool().ExecRow(context.Background(), "update crud_object set status=0")
+		return
+	})
 }
