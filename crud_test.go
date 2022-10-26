@@ -1203,7 +1203,7 @@ func testQuery(t *testing.T, queryer Queryer) {
 			return
 		}
 		results = nil
-		err = QueryWheref(queryer, context.Background(), object, "#all", "level>$%v#all", []interface{}{0}, 0, 0, &results)
+		err = QueryWheref(queryer, context.Background(), object, "#all", "level>$%v#all", []interface{}{0}, "", 0, 0, &results)
 		if err != nil || len(results) != 11 {
 			t.Error(err)
 			return
@@ -1221,7 +1221,7 @@ func testQuery(t *testing.T, queryer Queryer) {
 			return
 		}
 		results = nil
-		err = Default.QueryWheref(queryer, context.Background(), object, "#all", "level>$%v#all", []interface{}{0}, 0, 0, &results)
+		err = Default.QueryWheref(queryer, context.Background(), object, "#all", "level>$%v#all", []interface{}{0}, "", 0, 0, &results)
 		if err != nil || len(results) != 11 {
 			t.Error(err)
 			return
@@ -1238,7 +1238,7 @@ func testQuery(t *testing.T, queryer Queryer) {
 		var int64Map1 map[int64][]int64
 		var infoMap = ObjectInfoMap{}
 		err = QueryWheref(
-			queryer, context.Background(), object, "#all", "", nil, 0, 0,
+			queryer, context.Background(), object, "#all", "", nil, "", 0, 0,
 			&resultList, &result,
 			&int64IDs0, "int64_value",
 			&int64IDs1, "int64_value#all",
@@ -1496,7 +1496,7 @@ func testQuery(t *testing.T, queryer Queryer) {
 			return
 		}
 
-		err = QueryWheref(queryer, context.Background(), object, "#all", "levxxel>$%v#all", []interface{}{0}, 0, 0, &results)
+		err = QueryWheref(queryer, context.Background(), object, "#all", "levxxel>$%v#all", []interface{}{0}, "", 0, 0, &results)
 		if err == nil {
 			t.Error(err)
 			return

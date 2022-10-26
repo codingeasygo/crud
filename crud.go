@@ -1323,20 +1323,20 @@ func (c *CRUD) queryFilter(caller int, queryer interface{}, ctx context.Context,
 	return
 }
 
-func QueryWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
-	err = Default.queryWheref(1, queryer, ctx, v, filter, formats, args, offset, limit, dest...)
+func QueryWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
+	err = Default.queryWheref(1, queryer, ctx, v, filter, formats, args, orderby, offset, limit, dest...)
 	return
 }
 
-func (c *CRUD) QueryWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
-	err = c.queryWheref(1, queryer, ctx, v, filter, formats, args, offset, limit, dest...)
+func (c *CRUD) QueryWheref(queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
+	err = c.queryWheref(1, queryer, ctx, v, filter, formats, args, orderby, offset, limit, dest...)
 	return
 }
 
-func (c *CRUD) queryWheref(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, offset, limit int, dest ...interface{}) (err error) {
+func (c *CRUD) queryWheref(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
 	sql := c.querySQL(caller+1, v, filter)
 	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
-	sql = c.joinPage(caller+1, sql, "", offset, limit)
+	sql = c.joinPage(caller+1, sql, orderby, offset, limit)
 	err = c.query(caller+1, queryer, ctx, v, filter, sql, sqlArgs, dest...)
 	return
 }
