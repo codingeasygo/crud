@@ -629,21 +629,22 @@ func (c *CRUD) queryerQueryRow(queryer interface{}, ctx context.Context, sql str
 	return
 }
 
-func InsertArgs(v interface{}, filter string) (table string, fields, param []string, args []interface{}) {
-	table, fields, param, args = Default.insertArgs(1, v, filter)
+func InsertArgs(v interface{}, filter string, args []interface{}) (table string, fields, param []string, args_ []interface{}) {
+	table, fields, param, args_ = Default.insertArgs(1, v, filter, args)
 	return
 }
 
-func (c *CRUD) InsertArgs(v interface{}, filter string) (table string, fields, param []string, args []interface{}) {
-	table, fields, param, args = c.insertArgs(1, v, filter)
+func (c *CRUD) InsertArgs(v interface{}, filter string, args []interface{}) (table string, fields, param []string, args_ []interface{}) {
+	table, fields, param, args_ = c.insertArgs(1, v, filter, args)
 	return
 }
 
-func (c *CRUD) insertArgs(caller int, v interface{}, filter string) (table string, fields, param []string, args []interface{}) {
+func (c *CRUD) insertArgs(caller int, v interface{}, filter string, args []interface{}) (table string, fields, param []string, args_ []interface{}) {
+	args_ = args
 	table = c.FilterFieldCall("insert", v, filter, func(fieldName, fieldFunc string, field reflect.StructField, value interface{}) {
-		args = append(args, c.ParmConv("insert", fieldName, fieldFunc, field, value))
+		args_ = append(args_, c.ParmConv("insert", fieldName, fieldFunc, field, value))
 		fields = append(fields, fieldName)
-		param = append(param, fmt.Sprintf(c.ArgFormat, len(args)))
+		param = append(param, fmt.Sprintf(c.ArgFormat, len(args_)))
 	})
 	if c.Verbose {
 		c.Log(caller, "CRUD generate insert args by struct:%v,filter:%v, result is fields:%v,param:%v,args:%v", reflect.TypeOf(v), filter, fields, param, jsonString(args))
@@ -662,7 +663,7 @@ func (c *CRUD) InsertSQL(v interface{}, filter string, suffix ...string) (sql st
 }
 
 func (c *CRUD) insertSQL(caller int, v interface{}, filter string, suffix ...string) (sql string, args []interface{}) {
-	table, fields, param, args := c.insertArgs(caller+1, v, filter)
+	table, fields, param, args := c.insertArgs(caller+1, v, filter, nil)
 	sql = fmt.Sprintf(`insert into %v(%v) values(%v) %v`, table, strings.Join(fields, ","), strings.Join(param, ","), strings.Join(suffix, " "))
 	if c.Verbose {
 		c.Log(caller, "CRUD generate insert sql by struct:%v,filter:%v, result is sql:%v", reflect.TypeOf(v), filter, sql)
@@ -681,7 +682,7 @@ func (c *CRUD) InsertFilter(queryer interface{}, ctx context.Context, v interfac
 }
 
 func (c *CRUD) insertFilter(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, join, scan string) (insertId int64, err error) {
-	table, fields, param, args := c.insertArgs(caller+1, v, filter)
+	table, fields, param, args := c.insertArgs(caller+1, v, filter, nil)
 	sql := fmt.Sprintf(`insert into %v(%v) values(%v)`, table, strings.Join(fields, ","), strings.Join(param, ","))
 	if len(scan) < 1 {
 		if len(join) > 0 {

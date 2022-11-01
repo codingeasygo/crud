@@ -594,7 +594,7 @@ func testInsert(t *testing.T, queryer Queryer) {
 	}
 	{
 		object := newTestObject()
-		table, fields, param, args := InsertArgs(object, "")
+		table, fields, param, args := InsertArgs(object, "", nil)
 		if table != "crud_object" || len(fields) < 1 || len(param) < 1 || len(args) < 1 {
 			t.Error("error")
 			return
@@ -616,7 +616,7 @@ func testInsert(t *testing.T, queryer Queryer) {
 	}
 	{
 		object := newTestObject()
-		table, fields, param, args := Default.InsertArgs(object, "")
+		table, fields, param, args := Default.InsertArgs(object, "", nil)
 		if table != "crud_object" || len(fields) < 1 || len(param) < 1 || len(args) < 1 {
 			t.Error("err")
 			return
@@ -1809,7 +1809,11 @@ func TestUnify(t *testing.T) {
 
 func testUnify(t *testing.T, queryer Queryer) {
 	var err error
-	object, _, _ := addTestMultiObject(queryer)
+	object, _, err := addTestMultiObject(queryer)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	newSearch := func() *SearchCrudObjectUnify {
 		search := &SearchCrudObjectUnify{}
 		search.Where.UserID = 100
