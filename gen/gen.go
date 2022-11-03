@@ -394,17 +394,17 @@ func (g *AutoGen) FieldTags(s *Struct, field *Field) (allTag string) {
 		}
 	}
 	func() { //valid
-		if len(field.Options) > 0 {
-			if field.Type == "string" {
-				addTag(`valid:"%v,r|s,e:0;"`, field.Column.Name)
-			} else {
-				addTag(`valid:"%v,r|i,e:0;"`, field.Column.Name)
-			}
-			return
-		}
 		required := "r"
 		if fieldOptionalValue.HavingOne(field.Column.Name) {
 			required = "o"
+		}
+		if len(field.Options) > 0 {
+			if field.Type == "string" {
+				addTag(`valid:"%v,%v|s,e:0;"`, field.Column.Name, required)
+			} else {
+				addTag(`valid:"%v,%v|i,e:0;"`, field.Column.Name, required)
+			}
+			return
 		}
 		switch field.Type {
 		case "int", "int64", "*int", "*int64":
