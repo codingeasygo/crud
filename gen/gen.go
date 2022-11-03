@@ -304,6 +304,7 @@ func (g *AutoGen) FuncMap() (funcs template.FuncMap) {
 	return template.FuncMap{
 		"JoinShowOption":  g.JoinShowOption,
 		"PrimaryField":    g.PrimaryField,
+		"FieldInvalid":    g.FieldInvalid,
 		"FieldZero":       g.FieldZero,
 		"FieldType":       g.FieldType,
 		"FieldTags":       g.FieldTags,
@@ -341,6 +342,16 @@ func (g *AutoGen) PrimaryField(s *Struct, key string) string {
 		}
 	}
 	return ""
+}
+
+func (g *AutoGen) FieldInvalid(s *Struct, field *Field) (typ string) {
+	switch field.Type {
+	case "string":
+		typ = `"this should invalid"`
+	default:
+		typ = `-321654`
+	}
+	return
 }
 
 func (g *AutoGen) FieldZero(s *Struct, field *Field) (typ string) {

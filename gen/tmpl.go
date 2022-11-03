@@ -404,7 +404,7 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 			t.Error("not enum valid")
 			return
 		}
-		if value.EnumValid({{$field.Type}}({{FieldZero $.Struct $field}})) == nil {
+		if value.EnumValid({{$field.Type}}({{FieldInvalid $.Struct $field}})) == nil {
 			t.Error("not enum valid")
 			return
 		}
@@ -412,7 +412,7 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 			t.Error("not enum valid")
 			return
 		}
-		if {{$.Struct.Name}}{{$field.Name}}All.EnumValid({{$field.Type}}({{FieldZero $.Struct $field}})) == nil {
+		if {{$.Struct.Name}}{{$field.Name}}All.EnumValid({{$field.Type}}({{FieldInvalid $.Struct $field}})) == nil {
 			t.Error("not enum valid")
 			return
 		}
