@@ -2,7 +2,10 @@ package pgx
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +14,7 @@ import (
 
 	"github.com/codingeasygo/crud/gen"
 	"github.com/codingeasygo/crud/testsql"
+	"github.com/codingeasygo/util/converter"
 	"github.com/codingeasygo/util/xmap"
 	"github.com/codingeasygo/util/xsql"
 	"github.com/jackc/pgx/v4"
@@ -190,8 +194,21 @@ func TestQueryer(t *testing.T) {
 func TestMocker(t *testing.T) {
 	MockerStart()
 	defer MockerStop()
-	MockerSetCall("Pool.Exec", 1).ShouldError(t).Call(func(trigger int) (res xmap.M, err error) {
-		_, err = Pool().ExecRow(context.Background(), "update crud_object set status=0")
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%v", converter.JSON(xmap.M{"code": 0}))
+	}))
+	errCall := func(trigger int) (res xmap.M, err error) {
+		err = fmt.Errorf("error")
 		return
-	})
+	}
+	okCall := func(trigger int) (res xmap.M, err error) {
+		return
+	}
+	MockerSetCall("Pool.Exec", 1).Should(t).OnlyLog(true).Call(errCall)
+	MockerSetCall("Pool.Exec", 1).Should(t).OnlyLog(true).GetMap("http://127.0.0.1:234")
+	Should(t).OnlyLog(true).Call(errCall)
+	Should(t).OnlyLog(true).GetMap("http://127.0.0.1:234")
+	ShouldError(t).OnlyLog(true).Call(okCall)
+	ShouldError(t).OnlyLog(true).GetMap("%v", ts.URL)
+	MockerPanicCall("Pool.Exec", 1).Should(t).OnlyLog(true).Call(errCall)
 }
