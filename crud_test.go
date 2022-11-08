@@ -1802,6 +1802,21 @@ type FilterGetterCrudObjectUnify struct {
 	} `json:"count" filter:"count(tid)#all"`
 }
 
+type ModelFromCrudObjectUnifyMini struct {
+	Model CrudObject `json:"model" from:"crud_object o"`
+	Where struct {
+		Type   CrudObjectType        `json:"o.type"`
+		Status CrudObjectStatusArray `json:"o.status" cmp:"o.status=any($%v)"`
+	} `json:"where" join:"and"`
+	Query struct {
+		Objects []*CrudObject `json:"objects"`
+		UserIDs []int64       `json:"user_ids" scan:"user_id#all"`
+	} `json:"query" filter:"#all"`
+	Count struct {
+		All int64 `json:"all" scan:"tid"`
+	} `json:"count" filter:"o.count(tid)#all"`
+}
+
 func TestUnify(t *testing.T) {
 	clearPG()
 	testUnify(t, getPG())
@@ -1870,6 +1885,12 @@ func testUnify(t *testing.T, queryer Queryer) {
 		filter.QueryRow.Filter = FilterGetterF(func(args ...interface{}) string {
 			return "tid,int_value#all"
 		})
+		return filter
+	}
+	newModelFrom := func() *ModelFromCrudObjectUnifyMini {
+		filter := &ModelFromCrudObjectUnifyMini{}
+		filter.Where.Type = CrudObjectTypeA
+		filter.Where.Status = CrudObjectStatusShow
 		return filter
 	}
 	{
@@ -2132,6 +2153,17 @@ func testUnify(t *testing.T, queryer Queryer) {
 		modelValue, queryFilter, dests := ScanUnifyDest(find, "QueryRow")
 		err = ScanRow(row, modelValue, queryFilter, dests...)
 		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		from := newModelFrom()
+		err = ApplyUnify(queryer, context.Background(), from)
+		if err != nil || len(from.Query.Objects) < 1 || len(from.Query.Objects[0].Title) < 1 || from.Count.All < 1 {
+			fmt.Printf("--->%v\n", converter.JSON(from.Query.Objects))
+			fmt.Printf("--->%v\n", converter.JSON(from.Query.UserIDs))
+			fmt.Printf("--->%v\n", converter.JSON(from.Count.All))
 			t.Error(err)
 			return
 		}

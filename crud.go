@@ -962,17 +962,20 @@ func (c *CRUD) queryField(caller int, v interface{}, filter string) (table strin
 }
 
 func QuerySQL(v interface{}, filter string, suffix ...string) (sql string) {
-	sql = Default.querySQL(1, v, filter, suffix...)
+	sql = Default.querySQL(1, v, "", filter, suffix...)
 	return
 }
 
 func (c *CRUD) QuerySQL(v interface{}, filter string, suffix ...string) (sql string) {
-	sql = c.querySQL(1, v, filter, suffix...)
+	sql = c.querySQL(1, v, "", filter, suffix...)
 	return
 }
 
-func (c *CRUD) querySQL(caller int, v interface{}, filter string, suffix ...string) (sql string) {
+func (c *CRUD) querySQL(caller int, v interface{}, from, filter string, suffix ...string) (sql string) {
 	table, fields := c.queryField(caller+1, v, filter)
+	if len(from) > 0 {
+		table = from
+	}
 	sql = fmt.Sprintf(`select %v from %v`, strings.Join(fields, ","), table)
 	if len(suffix) > 0 {
 		sql += " " + strings.Join(suffix, " ")
@@ -997,6 +1000,8 @@ func (c *CRUD) queryUnifySQL(caller int, v interface{}, field string) (sql strin
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	modelValue := reflectValue.FieldByName("Model")
+	modelType, _ := reflectType.FieldByName("Model")
+	modelFrom := modelType.Tag.Get("from")
 	queryType, _ := reflectType.FieldByName(field)
 	queryValue := reflectValue.FieldByName(field)
 	queryFilter := queryType.Tag.Get("filter")
@@ -1013,7 +1018,7 @@ func (c *CRUD) queryUnifySQL(caller int, v interface{}, field string) (sql strin
 			continue
 		}
 	}
-	sql = c.querySQL(caller+1, modelValue.Addr().Interface(), queryFilter)
+	sql = c.querySQL(caller+1, modelValue.Addr().Interface(), modelFrom, queryFilter)
 	sql, args = c.joinWhereUnify(caller+1, sql, nil, v)
 	sql = c.joinPageUnify(caller+1, sql, v)
 	return
@@ -1317,7 +1322,7 @@ func (c *CRUD) QueryFilter(queryer interface{}, ctx context.Context, v interface
 }
 
 func (c *CRUD) queryFilter(caller int, queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
-	sql := c.querySQL(caller+1, v, filter)
+	sql := c.querySQL(caller+1, v, "", filter)
 	sql = c.joinWhere(caller+1, sql, where, sep)
 	sql = c.joinPage(caller+1, sql, orderby, offset, limit)
 	err = c.query(caller+1, queryer, ctx, v, filter, sql, args, dest...)
@@ -1335,7 +1340,7 @@ func (c *CRUD) QueryWheref(queryer interface{}, ctx context.Context, v interface
 }
 
 func (c *CRUD) queryWheref(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, orderby string, offset, limit int, dest ...interface{}) (err error) {
-	sql := c.querySQL(caller+1, v, filter)
+	sql := c.querySQL(caller+1, v, "", filter)
 	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
 	sql = c.joinPage(caller+1, sql, orderby, offset, limit)
 	err = c.query(caller+1, queryer, ctx, v, filter, sql, sqlArgs, dest...)
@@ -1438,7 +1443,7 @@ func (c *CRUD) QueryRowFilter(queryer interface{}, ctx context.Context, v interf
 }
 
 func (c *CRUD) queryRowFilter(caller int, queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, dest ...interface{}) (err error) {
-	sql := c.querySQL(caller+1, v, filter)
+	sql := c.querySQL(caller+1, v, "", filter)
 	sql = c.joinWhere(caller+1, sql, where, sep)
 	err = c.queryRow(caller+1, queryer, ctx, v, filter, sql, args, dest...)
 	return
@@ -1455,7 +1460,7 @@ func (c *CRUD) QueryRowWheref(queryer interface{}, ctx context.Context, v interf
 }
 
 func (c *CRUD) queryRowWheref(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, dest ...interface{}) (err error) {
-	sql := c.querySQL(caller+1, v, filter)
+	sql := c.querySQL(caller+1, v, "", filter)
 	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
 	err = c.queryRow(caller+1, queryer, ctx, v, filter, sql, sqlArgs, dest...)
 	return
@@ -1487,16 +1492,16 @@ func (c *CRUD) queryRowUnify(caller int, queryer interface{}, ctx context.Contex
 }
 
 func CountSQL(v interface{}, filter string, suffix ...string) (sql string) {
-	sql = Default.countSQL(1, v, filter, suffix...)
+	sql = Default.countSQL(1, v, "", filter, suffix...)
 	return
 }
 
 func (c *CRUD) CountSQL(v interface{}, filter string, suffix ...string) (sql string) {
-	sql = c.countSQL(1, v, filter, suffix...)
+	sql = c.countSQL(1, v, "", filter, suffix...)
 	return
 }
 
-func (c *CRUD) countSQL(caller int, v interface{}, filter string, suffix ...string) (sql string) {
+func (c *CRUD) countSQL(caller int, v interface{}, from string, filter string, suffix ...string) (sql string) {
 	var table string
 	var fields []string
 	if len(filter) < 1 || filter == "*" || filter == "count(*)" || filter == "count(*)#all" {
@@ -1504,6 +1509,9 @@ func (c *CRUD) countSQL(caller int, v interface{}, filter string, suffix ...stri
 		fields = []string{"count(*)"}
 	} else {
 		table, fields = c.queryField(caller+1, v, filter)
+	}
+	if len(from) > 0 {
+		table = from
 	}
 	sql = fmt.Sprintf(`select %v from %v`, strings.Join(fields, ","), table)
 	if len(suffix) > 0 {
@@ -1529,9 +1537,11 @@ func (c *CRUD) countUnifySQL(caller int, v interface{}) (sql string, args []inte
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	modelValue := reflectValue.FieldByName("Model").Addr().Interface()
+	modelType, _ := reflectType.FieldByName("Model")
+	modelFrom := modelType.Tag.Get("from")
 	queryType, _ := reflectType.FieldByName("Count")
 	queryFilter := queryType.Tag.Get("filter")
-	sql = c.countSQL(caller+1, modelValue, queryFilter)
+	sql = c.countSQL(caller+1, modelValue, modelFrom, queryFilter)
 	sql, args = c.joinWhereUnify(caller+1, sql, nil, v)
 	return
 }
@@ -1601,7 +1611,7 @@ func (c *CRUD) CountFilter(queryer interface{}, ctx context.Context, v interface
 }
 
 func (c *CRUD) countFilter(caller int, queryer interface{}, ctx context.Context, v interface{}, filter string, where []string, sep string, args []interface{}, suffix string, dest ...interface{}) (err error) {
-	sql := c.countSQL(caller+1, v, filter)
+	sql := c.countSQL(caller+1, v, "", filter)
 	sql = c.joinWhere(caller+1, sql, where, sep, suffix)
 	err = c.count(caller+1, queryer, ctx, v, filter, sql, args, dest...)
 	return
@@ -1618,7 +1628,7 @@ func (c *CRUD) CountWheref(queryer interface{}, ctx context.Context, v interface
 }
 
 func (c *CRUD) countWheref(caller int, queryer interface{}, ctx context.Context, v interface{}, filter, formats string, args []interface{}, suffix string, dest ...interface{}) (err error) {
-	sql := c.countSQL(caller+1, v, filter)
+	sql := c.countSQL(caller+1, v, "", filter)
 	sql, sqlArgs := c.joinWheref(caller+1, sql, nil, formats, args...)
 	if len(suffix) > 0 {
 		sql += " " + suffix
