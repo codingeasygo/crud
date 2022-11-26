@@ -35,6 +35,7 @@ func init() {
 		}
 		return value
 	}
+	Args()
 	go http.ListenAndServe(":6063", nil)
 }
 
@@ -1817,6 +1818,21 @@ type ModelFromCrudObjectUnifyMini struct {
 	} `json:"count" filter:"o.count(tid)#all"`
 }
 
+type ModelSelectCrudObjectUnify struct {
+	Model CrudObject `json:"model"`
+	Where struct {
+		Type   CrudObjectType        `json:"o.type"`
+		Status CrudObjectStatusArray `json:"o.status" cmp:"o.status=any($%v)"`
+	} `json:"where" join:"and"`
+	Query struct {
+		Objects []*CrudObject `json:"objects"`
+		UserIDs []int64       `json:"user_ids" scan:"user_id#all"`
+	} `json:"query" select:"select distinct %v from crud_object o" filter:"o.#all"`
+	Count struct {
+		All int64 `json:"all" scan:"tid"`
+	} `json:"count" select:"select count(distinct %v) from crud_object o" filter:"o.tid#all"`
+}
+
 func TestUnify(t *testing.T) {
 	clearPG()
 	testUnify(t, getPG())
@@ -1889,6 +1905,12 @@ func testUnify(t *testing.T, queryer Queryer) {
 	}
 	newModelFrom := func() *ModelFromCrudObjectUnifyMini {
 		filter := &ModelFromCrudObjectUnifyMini{}
+		filter.Where.Type = CrudObjectTypeA
+		filter.Where.Status = CrudObjectStatusShow
+		return filter
+	}
+	newModelSelect := func() *ModelSelectCrudObjectUnify {
+		filter := &ModelSelectCrudObjectUnify{}
 		filter.Where.Type = CrudObjectTypeA
 		filter.Where.Status = CrudObjectStatusShow
 		return filter
@@ -2164,6 +2186,17 @@ func testUnify(t *testing.T, queryer Queryer) {
 			fmt.Printf("--->%v\n", converter.JSON(from.Query.Objects))
 			fmt.Printf("--->%v\n", converter.JSON(from.Query.UserIDs))
 			fmt.Printf("--->%v\n", converter.JSON(from.Count.All))
+			t.Error(err)
+			return
+		}
+	}
+	{
+		sel := newModelSelect()
+		err = ApplyUnify(queryer, context.Background(), sel)
+		if err != nil || len(sel.Query.Objects) < 1 || len(sel.Query.Objects[0].Title) < 1 || sel.Count.All < 1 {
+			fmt.Printf("--->%v\n", converter.JSON(sel.Query.Objects))
+			fmt.Printf("--->%v\n", converter.JSON(sel.Query.UserIDs))
+			fmt.Printf("--->%v\n", converter.JSON(sel.Count.All))
 			t.Error(err)
 			return
 		}
