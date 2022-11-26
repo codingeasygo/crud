@@ -120,6 +120,10 @@ type LogF func(caller int, format string, args ...interface{})
 type TableName string
 type FilterValue string
 
+func Args(args ...interface{}) []interface{} {
+	return args
+}
+
 type CRUD struct {
 	attrscan.Scanner
 	ArgFormat   string
