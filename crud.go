@@ -1029,6 +1029,7 @@ func (c *CRUD) queryUnifySQL(caller int, v interface{}, field string) (sql strin
 			_, fields := c.queryField(caller+1, modelValue.Addr().Interface(), queryFilter)
 			sql = fmt.Sprintf(querySelect, strings.Join(fields, ","))
 		}
+		sql += " " + modelFrom
 	} else {
 		sql = c.querySQL(caller+1, modelValue.Addr().Interface(), modelFrom, queryFilter)
 	}
@@ -1561,6 +1562,7 @@ func (c *CRUD) countUnifySQL(caller int, v interface{}) (sql string, args []inte
 			_, fields := c.queryField(caller+1, modelValue, queryFilter)
 			sql = fmt.Sprintf(querySelect, strings.Join(fields, ","))
 		}
+		sql += " " + modelFrom
 	} else {
 		sql = c.countSQL(caller+1, modelValue, modelFrom, queryFilter)
 	}
