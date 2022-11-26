@@ -1819,7 +1819,7 @@ type ModelFromCrudObjectUnifyMini struct {
 }
 
 type ModelSelectCrudObjectUnify struct {
-	Model CrudObject `json:"model"`
+	Model CrudObject `json:"model" from:"crud_object o"`
 	Where struct {
 		Type   CrudObjectType        `json:"o.type"`
 		Status CrudObjectStatusArray `json:"o.status" cmp:"o.status=any($%v)"`
@@ -1827,10 +1827,10 @@ type ModelSelectCrudObjectUnify struct {
 	Query struct {
 		Objects []*CrudObject `json:"objects"`
 		UserIDs []int64       `json:"user_ids" scan:"user_id#all"`
-	} `json:"query" select:"select distinct %v from crud_object o" filter:"o.#all"`
+	} `json:"query" select:"select distinct %v" filter:"o.#all"`
 	Count struct {
 		All int64 `json:"all" scan:"tid"`
-	} `json:"count" select:"select count(distinct %v) from crud_object o" filter:"o.tid#all"`
+	} `json:"count" select:"select count(distinct %v)" filter:"o.tid#all"`
 }
 
 func TestUnify(t *testing.T) {
