@@ -40,7 +40,9 @@ var DefineTmpl = `
  * @apiDefine {{.Struct.Name}}Update
 {{- range .Update.Fields }}
 {{- if not .External.Optional}}
-{{- if .External.OnlyAdd}}
+{{- if .External.OnlyUpdate}}
+ * @apiParam ({{$.Struct.Name}}) {{"{"}}{{FieldDefineType $.Struct . }}{{"}"}} {{$.Struct.Name}}.{{.Column.Name}} only available when update, {{ .Comment }}{{if .Options}}, all suported is <a href="#metadata-{{$.Struct.Name}}">{{$.Struct.Name}}{{.Name}}All</a>{{end}}
+{{- else if .External.OnlyAdd}}
  * @apiParam ({{$.Struct.Name}}) {{"{"}}{{FieldDefineType $.Struct . }}{{"}"}} {{$.Struct.Name}}.{{.Column.Name}} only available when add, {{ .Comment }}{{if .Options}}, all suported is <a href="#metadata-{{$.Struct.Name}}">{{$.Struct.Name}}{{.Name}}All</a>{{end}}
 {{- else}}
  * @apiParam ({{$.Struct.Name}}) {{"{"}}{{FieldDefineType $.Struct . }}{{"}"}} {{$.Struct.Name}}.{{.Column.Name}} only required when add, {{ .Comment }}{{if .Options}}, all suported is <a href="#metadata-{{$.Struct.Name}}">{{$.Struct.Name}}{{.Name}}All</a>{{end}}

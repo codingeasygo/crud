@@ -545,14 +545,16 @@ func (g *AutoGen) OnPre(gen *Gen, table *Table) (data interface{}) {
 	fieldUpdateAll := []*Field{}
 	for _, field := range s.Fields {
 		update := fieldUpdateValue.HavingOne(field.Column.Name)
+		onlyUpdate := field.Column.IsPK
 		onlyAdd := fieldRequiredValue.HavingOne(field.Column.Name) && !update
 		optional := fieldOptionalValue.HavingOne(field.Column.Name)
 		field.External = xmap.M{
-			"Update":   update,
-			"OnlyAdd":  onlyAdd,
-			"Optional": optional,
+			"Update":     update,
+			"OnlyUpdate": onlyUpdate,
+			"OnlyAdd":    onlyAdd,
+			"Optional":   optional,
 		}
-		if update || onlyAdd {
+		if update || onlyUpdate || onlyAdd {
 			fieldUpdateAll = append(fieldUpdateAll, field)
 		}
 	}
