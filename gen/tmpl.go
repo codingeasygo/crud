@@ -337,6 +337,18 @@ func List{{.Struct.Name}}FilterByIDCall(caller interface{}, ctx context.Context,
 	return
 }
 
+//List{{.Struct.Name}}Wheref will list {{.Struct.Table.Name}} from database
+func List{{.Struct.Name}}Wheref(ctx context.Context, format string, args ...interface{}) ({{.Arg.Name}}List []*{{.Struct.Name}}, {{.Arg.Name}}Map map[{{PrimaryField .Struct "Type"}}]*{{.Struct.Name}}, err error) {
+	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}WherefCall(GetQueryer, ctx, format, args...)
+	return
+}
+
+//List{{.Struct.Name}}WherefCall will list {{.Struct.Table.Name}} from database
+func List{{.Struct.Name}}WherefCall(caller interface{}, ctx context.Context, format string, args ...interface{}) ({{.Arg.Name}}List []*{{.Struct.Name}}, {{.Arg.Name}}Map map[{{PrimaryField .Struct "Type"}}]*{{.Struct.Name}}, err error) {
+	err = Scan{{.Struct.Name}}FilterWherefCall(caller, ctx, "{{.Filter.Scan}}", format, args, "", &{{.Arg.Name}}List, &{{.Arg.Name}}Map, "{{PrimaryField .Struct "Column"}}")
+	return
+}
+
 //Scan{{.Struct.Name}}ByID will list {{.Struct.Table.Name}} by id from database
 func Scan{{.Struct.Name}}ByID(ctx context.Context, {{.Arg.Name}}IDs []{{PrimaryField .Struct "Type"}}, dest ...interface{}) (err error) {
 	err = Scan{{.Struct.Name}}ByIDCall(GetQueryer, ctx, {{.Arg.Name}}IDs, dest...)
@@ -545,6 +557,15 @@ func TestAuto{{.Struct.Name}}(t *testing.T) {
 		return
 	}
 	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}FilterByID(context.Background(), "#all", {{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len({{.Arg.Name}}List) != 1 || {{.Arg.Name}}List[0].{{PrimaryField .Struct "Name"}} != {{.Arg.Name}}.{{PrimaryField .Struct "Name"}} || len({{.Arg.Name}}Map) != 1 || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}] == nil || {{.Arg.Name}}Map[{{.Arg.Name}}.{{PrimaryField .Struct "Name"}}].{{PrimaryField .Struct "Name"}} != {{.Arg.Name}}.{{PrimaryField .Struct "Name"}} {
+		t.Error("list id error")
+		return
+	}
+	{{.Arg.Name}}List, {{.Arg.Name}}Map, err = List{{.Struct.Name}}Wheref(context.Background(), "tid=$%v", {{.Arg.Name}}.{{PrimaryField .Struct "Name"}})
 	if err != nil {
 		t.Error(err)
 		return
