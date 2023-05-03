@@ -267,6 +267,7 @@ const (
 
 type AutoGen struct {
 	TypeField     map[string]map[string]string
+	ValidField    map[string]map[string]string
 	FieldFilter   map[string]map[string]string
 	CodeAddInit   map[string]string
 	CodeTestInit  map[string]string
@@ -382,6 +383,9 @@ func (g *AutoGen) FieldType(s *Struct, field *Field) (typ string) {
 }
 
 func (g *AutoGen) FieldTags(s *Struct, field *Field) (allTag string) {
+	if g.ValidField == nil {
+		g.ValidField = map[string]map[string]string{}
+	}
 	var tags []string
 	addTag := func(format string, args ...interface{}) {
 		tags = append(tags, fmt.Sprintf(format, args...))
@@ -393,7 +397,13 @@ func (g *AutoGen) FieldTags(s *Struct, field *Field) (allTag string) {
 			fieldOptionalValue = xsql.AsStringArray(strings.SplitN(fieldOptional, "#", 2)[0])
 		}
 	}
-	func() { //valid
+	var fieldValidValue string
+	if fieldValid := g.ValidField[s.Table.Name]; len(fieldValid) > 0 {
+		fieldValidValue = fieldValid[field.Column.Name]
+	}
+	if len(fieldValidValue) > 0 {
+		addTag(`valid:"%v"`, fieldValidValue)
+	} else { //valid
 		required := "r"
 		if fieldOptionalValue.HavingOne(field.Column.Name) {
 			required = "o"
@@ -420,7 +430,7 @@ func (g *AutoGen) FieldTags(s *Struct, field *Field) (allTag string) {
 		case "xsql.Time":
 			addTag(`valid:"%v,%v|i,r:1;"`, field.Column.Name, required)
 		}
-	}()
+	}
 	if len(tags) > 0 {
 		allTag = " " + strings.Join(tags, " ")
 	}
