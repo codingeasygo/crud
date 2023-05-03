@@ -410,7 +410,6 @@ func (g *AutoGen) FieldTags(s *Struct, field *Field) (allTag string) {
 			required = "o"
 		}
 		if len(field.Options) > 0 {
-			fmt.Printf("--->%v->%v\n", field.Name, field.Options)
 			if field.Type == "string" {
 				addTag(`valid:"%v,%v|s,e:0;"`, field.Column.Name, required)
 			} else {
