@@ -6,6 +6,8 @@ github.com/codingeasygo/util v0.0.0-20221103081314-a6c91ccf3379 h1:CXtO4LWiFw5ss
 github.com/codingeasygo/util v0.0.0-20221103081314-a6c91ccf3379/go.mod h1:CE705pc3Xn2F3nqMKhvfaigeXeDudpdteTzbf+2jwig=
 github.com/codingeasygo/util v0.0.0-20230503112844-cc5d0257e1a1 h1:/4CCGAdb/2Dbm0RjsA8cUbGSZ3yLcO+EZ+U1EgxWt+A=
 github.com/codingeasygo/util v0.0.0-20230503112844-cc5d0257e1a1/go.mod h1:CE705pc3Xn2F3nqMKhvfaigeXeDudpdteTzbf+2jwig=
+github.com/codingeasygo/util v0.0.0-20230503114557-b3a8799a05e3 h1:4LANQsL4mFyLWGQkW2JJShX2US1zlSol+zyAmEAT00k=
+github.com/codingeasygo/util v0.0.0-20230503114557-b3a8799a05e3/go.mod h1:CE705pc3Xn2F3nqMKhvfaigeXeDudpdteTzbf+2jwig=
 github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
 github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
