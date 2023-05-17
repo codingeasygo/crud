@@ -2105,10 +2105,6 @@ func testUnify(t *testing.T, queryer Queryer) {
 			return
 		}
 		rows.Close()
-		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 {
-			t.Error(err)
-			return
-		}
 		countSQL, countArgs := CountUnifySQL(search)
 		row := queryer.QueryRow(context.Background(), countSQL, countArgs...)
 		modelValue, queryFilter, dests := CountUnifyDest(search)
@@ -2117,19 +2113,34 @@ func testUnify(t *testing.T, queryer Queryer) {
 			t.Error(err)
 			return
 		}
-		if err != nil || search.Count.All < 1 || search.Count.UserID < 1 {
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
 			t.Error(err)
 			return
 		}
-		countSQL, countArgs = CountUnifySQL(search)
-		row = queryer.QueryRow(context.Background(), countSQL, countArgs...)
-		modelValue, queryFilter, dests = CountUnifyDestTarget(search, "Count")
+	}
+	{
+		search := newSearch()
+		querySQL, queryArgs := QueryUnifySQL(search, "Query")
+		rows, err := queryer.Query(context.Background(), querySQL, queryArgs...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = ScanUnifyTarget(rows, search, "Query")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		rows.Close()
+		countSQL, countArgs := CountUnifySQL(search)
+		row := queryer.QueryRow(context.Background(), countSQL, countArgs...)
+		modelValue, queryFilter, dests := CountUnifyDestTarget(search, "Count")
 		err = ScanRow(row, modelValue, queryFilter, dests...)
 		if err != nil {
 			t.Error(err)
 			return
 		}
-		if err != nil || search.Count.All < 1 || search.Count.UserID < 1 {
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
 			t.Error(err)
 			return
 		}
@@ -2242,6 +2253,16 @@ func testUnify(t *testing.T, queryer Queryer) {
 		querySQL, queryArgs := Default.QueryUnifySQL(find, "QueryRow")
 		row := queryer.QueryRow(context.Background(), querySQL, queryArgs...)
 		err = ScanRowUnify(row, find)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		find := newFind()
+		querySQL, queryArgs := Default.QueryUnifySQL(find, "QueryRow")
+		row := queryer.QueryRow(context.Background(), querySQL, queryArgs...)
+		err = ScanRowUnifyTarget(row, find, "QueryRow")
 		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
 			t.Error(err)
 			return
