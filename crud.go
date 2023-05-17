@@ -1010,6 +1010,7 @@ func (c *CRUD) queryUnifySQL(caller int, v interface{}, field string) (sql strin
 	queryValue := reflectValue.FieldByName(field)
 	queryFilter := queryType.Tag.Get("filter")
 	querySelect := queryType.Tag.Get("select")
+	queryGroup := queryType.Tag.Get("group")
 	queryNum := queryType.Type.NumField()
 	for i := 0; i < queryNum; i++ {
 		fieldValue := queryValue.Field(i)
@@ -1033,6 +1034,7 @@ func (c *CRUD) queryUnifySQL(caller int, v interface{}, field string) (sql strin
 		sql = c.querySQL(caller+1, modelValue.Addr().Interface(), modelFrom, queryFilter)
 	}
 	sql, args = c.joinWhereUnify(caller+1, sql, nil, v)
+	sql += " " + queryGroup
 	sql = c.joinPageUnify(caller+1, sql, v)
 	return
 }
@@ -1640,6 +1642,7 @@ func (c *CRUD) countUnifySQL(caller int, v interface{}, key string) (sql string,
 	queryType, _ := reflectType.FieldByName(key)
 	queryFilter := queryType.Tag.Get("filter")
 	querySelect := queryType.Tag.Get("select")
+	queryGroup := queryType.Tag.Get("group")
 	if len(querySelect) > 0 {
 		sql = querySelect
 		if strings.Contains(querySelect, "%v") {
@@ -1650,6 +1653,7 @@ func (c *CRUD) countUnifySQL(caller int, v interface{}, key string) (sql string,
 		sql = c.countSQL(caller+1, modelValue, modelFrom, queryFilter)
 	}
 	sql, args = c.joinWhereUnify(caller+1, sql, nil, v)
+	sql += " " + queryGroup
 	return
 }
 
