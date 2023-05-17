@@ -1396,17 +1396,27 @@ func (c *CRUD) queryWheref(caller int, queryer interface{}, ctx context.Context,
 }
 
 func QueryUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
-	err = Default.queryUnify(1, queryer, ctx, v)
+	err = Default.queryUnify(1, queryer, ctx, v, "Query")
+	return
+}
+
+func QueryUnifyTarget(queryer interface{}, ctx context.Context, v interface{}, target string) (err error) {
+	err = Default.queryUnify(1, queryer, ctx, v, target)
 	return
 }
 
 func (c *CRUD) QueryUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
-	err = c.queryUnify(1, queryer, ctx, v)
+	err = c.queryUnify(1, queryer, ctx, v, "Query")
 	return
 }
 
-func (c *CRUD) queryUnify(caller int, queryer interface{}, ctx context.Context, v interface{}) (err error) {
-	sql, args := c.queryUnifySQL(caller+1, v, "Query")
+func (c *CRUD) QueryUnifyTarget(queryer interface{}, ctx context.Context, v interface{}, target string) (err error) {
+	err = c.queryUnify(1, queryer, ctx, v, target)
+	return
+}
+
+func (c *CRUD) queryUnify(caller int, queryer interface{}, ctx context.Context, v interface{}, target string) (err error) {
+	sql, args := c.queryUnifySQL(caller+1, v, target)
 	rows, err := c.queryerQuery(queryer, ctx, sql, args)
 	if err != nil {
 		if c.Verbose {
@@ -1515,17 +1525,27 @@ func (c *CRUD) queryRowWheref(caller int, queryer interface{}, ctx context.Conte
 }
 
 func QueryRowUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
-	err = Default.queryRowUnify(1, queryer, ctx, v)
+	err = Default.queryRowUnify(1, queryer, ctx, v, "QueryRow")
+	return
+}
+
+func QueryRowUnifyTarget(queryer interface{}, ctx context.Context, v interface{}, target string) (err error) {
+	err = Default.queryRowUnify(1, queryer, ctx, v, target)
 	return
 }
 
 func (c *CRUD) QueryRowUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
-	err = c.queryRowUnify(1, queryer, ctx, v)
+	err = c.queryRowUnify(1, queryer, ctx, v, "QueryRow")
 	return
 }
 
-func (c *CRUD) queryRowUnify(caller int, queryer interface{}, ctx context.Context, v interface{}) (err error) {
-	sql, args := c.queryUnifySQL(caller+1, v, "QueryRow")
+func (c *CRUD) QueryRowUnifyTarget(queryer interface{}, ctx context.Context, v interface{}, target string) (err error) {
+	err = c.queryRowUnify(1, queryer, ctx, v, target)
+	return
+}
+
+func (c *CRUD) queryRowUnify(caller int, queryer interface{}, ctx context.Context, v interface{}, target string) (err error) {
+	sql, args := c.queryUnifySQL(caller+1, v, target)
 	err = c.ScanRowUnify(c.queryerQueryRow(queryer, ctx, sql, args), v)
 	if err != nil {
 		if c.Verbose {
@@ -1572,22 +1592,22 @@ func (c *CRUD) countSQL(caller int, v interface{}, from string, filter string, s
 }
 
 func CountUnifySQL(v interface{}) (sql string, args []interface{}) {
-	sql, args = Default.countUnifySQL(1, v)
+	sql, args = Default.countUnifySQL(1, v, "Count")
 	return
 }
 
 func (c *CRUD) CountUnifySQL(v interface{}) (sql string, args []interface{}) {
-	sql, args = c.countUnifySQL(1, v)
+	sql, args = c.countUnifySQL(1, v, "Count")
 	return
 }
 
-func (c *CRUD) countUnifySQL(caller int, v interface{}) (sql string, args []interface{}) {
+func (c *CRUD) countUnifySQL(caller int, v interface{}, key string) (sql string, args []interface{}) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	modelValue := reflectValue.FieldByName("Model").Addr().Interface()
 	modelType, _ := reflectType.FieldByName("Model")
 	modelFrom := modelType.Tag.Get("from")
-	queryType, _ := reflectType.FieldByName("Count")
+	queryType, _ := reflectType.FieldByName(key)
 	queryFilter := queryType.Tag.Get("filter")
 	querySelect := queryType.Tag.Get("select")
 	if len(querySelect) > 0 {
@@ -1604,18 +1624,33 @@ func (c *CRUD) countUnifySQL(caller int, v interface{}) (sql string, args []inte
 }
 
 func CountUnifyDest(v interface{}) (modelValue interface{}, queryFilter string, dests []interface{}) {
-	modelValue, queryFilter, dests = Default.CountUnifyDest(v)
+	modelValue, queryFilter, dests = Default.countUnifyDest(v, "Count")
+	return
+}
+
+func CountUnifyDestTarget(v interface{}, target string) (modelValue interface{}, queryFilter string, dests []interface{}) {
+	modelValue, queryFilter, dests = Default.countUnifyDest(v, target)
 	return
 }
 
 func (c *CRUD) CountUnifyDest(v interface{}) (modelValue interface{}, queryFilter string, dests []interface{}) {
+	modelValue, queryFilter, dests = c.countUnifyDest(v, "Count")
+	return
+}
+
+func (c *CRUD) CountUnifyDestTarget(v interface{}, target string) (modelValue interface{}, queryFilter string, dests []interface{}) {
+	modelValue, queryFilter, dests = c.countUnifyDest(v, target)
+	return
+}
+
+func (c *CRUD) countUnifyDest(v interface{}, target string) (modelValue interface{}, queryFilter string, dests []interface{}) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
 	modelValueList := []interface{}{
 		TableName(c.Table(reflectValue.FieldByName("Model").Addr().Interface())),
 	}
-	queryType, _ := reflectType.FieldByName("Count")
-	queryValue := reflectValue.FieldByName("Count")
+	queryType, _ := reflectType.FieldByName(target)
+	queryValue := reflectValue.FieldByName(target)
 	queryFilter = queryType.Tag.Get("filter")
 	queryNum := queryType.Type.NumField()
 	for i := 0; i < queryNum; i++ {
@@ -1695,18 +1730,28 @@ func (c *CRUD) countWheref(caller int, queryer interface{}, ctx context.Context,
 }
 
 func CountUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
-	err = Default.countUnify(1, queryer, ctx, v)
+	err = Default.countUnify(1, queryer, ctx, v, "Count")
+	return
+}
+
+func CountUnifyTarget(queryer interface{}, ctx context.Context, v interface{}, target string) (err error) {
+	err = Default.countUnify(1, queryer, ctx, v, target)
 	return
 }
 
 func (c *CRUD) CountUnify(queryer interface{}, ctx context.Context, v interface{}) (err error) {
-	err = c.countUnify(1, queryer, ctx, v)
+	err = c.countUnify(1, queryer, ctx, v, "Count")
 	return
 }
 
-func (c *CRUD) countUnify(caller int, queryer interface{}, ctx context.Context, v interface{}) (err error) {
-	sql, args := c.countUnifySQL(caller+1, v)
-	modelValue, queryFilter, dests := c.CountUnifyDest(v)
+func (c *CRUD) CountUnifyTarget(queryer interface{}, ctx context.Context, v interface{}, target string) (err error) {
+	err = c.countUnify(1, queryer, ctx, v, target)
+	return
+}
+
+func (c *CRUD) countUnify(caller int, queryer interface{}, ctx context.Context, v interface{}, target string) (err error) {
+	sql, args := c.countUnifySQL(caller+1, v, target)
+	modelValue, queryFilter, dests := c.countUnifyDest(v, target)
 	err = c.ScanRow(c.queryerQueryRow(queryer, ctx, sql, args), modelValue, queryFilter, dests...)
 	if err != nil {
 		if c.Verbose {
@@ -1732,22 +1777,48 @@ func (c *CRUD) ApplyUnify(queryer interface{}, ctx context.Context, v interface{
 
 func (c *CRUD) applyUnify(caller int, queryer interface{}, ctx context.Context, v interface{}) (err error) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
+	reflectType := reflectValue.Type()
 	if value := reflectValue.FieldByName("Query"); value.IsValid() && err == nil {
 		enabled := value.FieldByName("Enabled")
 		if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
-			err = c.queryUnify(caller+1, queryer, ctx, v)
+			err = c.queryUnify(caller+1, queryer, ctx, v, "Query")
 		}
 	}
 	if value := reflectValue.FieldByName("QueryRow"); value.IsValid() && err == nil {
 		enabled := value.FieldByName("Enabled")
 		if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
-			err = c.queryRowUnify(caller+1, queryer, ctx, v)
+			err = c.queryRowUnify(caller+1, queryer, ctx, v, "QueryRow")
 		}
 	}
 	if value := reflectValue.FieldByName("Count"); value.IsValid() && err == nil {
 		enabled := value.FieldByName("Enabled")
 		if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
-			err = c.countUnify(caller+1, queryer, ctx, v)
+			err = c.countUnify(caller+1, queryer, ctx, v, "Count")
+		}
+	}
+	for i := 0; i < reflectType.NumField(); i++ {
+		fieldType := reflectType.Field(i)
+		fieldValue := reflectValue.Field(i)
+		apply := fieldType.Tag.Get("apply")
+		if len(apply) < 1 {
+			continue
+		}
+		switch apply {
+		case "Query":
+			enabled := fieldValue.FieldByName("Enabled")
+			if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
+				err = c.queryUnify(caller+1, queryer, ctx, v, fieldType.Name)
+			}
+		case "QueryRow":
+			enabled := fieldValue.FieldByName("Enabled")
+			if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
+				err = c.queryRowUnify(caller+1, queryer, ctx, v, fieldType.Name)
+			}
+		case "Count":
+			enabled := fieldValue.FieldByName("Enabled")
+			if !enabled.IsValid() || (enabled.IsValid() && enabled.Bool()) {
+				err = c.countUnify(caller+1, queryer, ctx, v, fieldType.Name)
+			}
 		}
 	}
 	return

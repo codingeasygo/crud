@@ -1763,6 +1763,10 @@ type SearchCrudObjectUnifySkip struct {
 		All     int64 `json:"all" scan:"tid"`
 		UserID  int64 `json:"user_id" scan:"user_id"`
 	} `json:"count" filter:"count(tid),max(user_id)#all"`
+	ApplyCount struct {
+		All    int64 `json:"all" scan:"tid"`
+		UserID int64 `json:"user_id" scan:"user_id"`
+	} `apply:"Count" json:"apply_count" filter:"count(tid),max(user_id)#all"`
 }
 
 type SearchCrudObjectUnifyMini struct {
@@ -1772,6 +1776,10 @@ type SearchCrudObjectUnifyMini struct {
 		Objects []*CrudObject `json:"objects"`
 		UserIDs []int64       `json:"user_ids" scan:"user_id#all"`
 	} `json:"query" filter:"#all"`
+	ApplyQuery struct {
+		Objects []*CrudObject `json:"objects"`
+		UserIDs []int64       `json:"user_ids" scan:"user_id#all"`
+	} `apply:"Query" json:"apply_query" filter:"#all"`
 }
 
 type FindCrudObjectUnify struct {
@@ -1789,6 +1797,10 @@ type FindCrudObjectUnify struct {
 		Object  *CrudObject `json:"object"`
 		UserID  int64       `json:"user_id" scan:"user_id#all"`
 	} `json:"query_row" filter:"#all"`
+	ApplyQueryRow struct {
+		Object *CrudObject `json:"object"`
+		UserID int64       `json:"user_id" scan:"user_id#all"`
+	} `apply:"QueryRow" json:"apply_query_row" filter:"#all"`
 }
 
 type FilterValueCrudObjectUnify struct {
@@ -2002,6 +2014,23 @@ func testUnify(t *testing.T, queryer Queryer) {
 	}
 	{
 		search := newSearch()
+		err = QueryUnifyTarget(queryer, context.Background(), search, "Query")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = CountUnifyTarget(queryer, context.Background(), search, "Count")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
+		search := newSearch()
 		err = Default.QueryUnify(queryer, context.Background(), search)
 		if err != nil {
 			t.Error(err)
@@ -2018,8 +2047,31 @@ func testUnify(t *testing.T, queryer Queryer) {
 		}
 	}
 	{
+		search := newSearch()
+		err = Default.QueryUnifyTarget(queryer, context.Background(), search, "Query")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = Default.CountUnifyTarget(queryer, context.Background(), search, "Count")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
+	}
+	{
 		find := newFind()
 		err = QueryRowUnify(queryer, context.Background(), find)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
+		find = newFind()
+		err = QueryRowUnifyTarget(queryer, context.Background(), find, "QueryRow")
 		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
 			t.Error(err)
 			return
@@ -2028,6 +2080,12 @@ func testUnify(t *testing.T, queryer Queryer) {
 	{
 		find := newFind()
 		err = Default.QueryRowUnify(queryer, context.Background(), find)
+		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
+		find = newFind()
+		err = Default.QueryRowUnifyTarget(queryer, context.Background(), find, "QueryRow")
 		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
 			t.Error(err)
 			return
@@ -2047,6 +2105,10 @@ func testUnify(t *testing.T, queryer Queryer) {
 			return
 		}
 		rows.Close()
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 {
+			t.Error(err)
+			return
+		}
 		countSQL, countArgs := CountUnifySQL(search)
 		row := queryer.QueryRow(context.Background(), countSQL, countArgs...)
 		modelValue, queryFilter, dests := CountUnifyDest(search)
@@ -2055,7 +2117,19 @@ func testUnify(t *testing.T, queryer Queryer) {
 			t.Error(err)
 			return
 		}
-		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+		if err != nil || search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
+		countSQL, countArgs = CountUnifySQL(search)
+		row = queryer.QueryRow(context.Background(), countSQL, countArgs...)
+		modelValue, queryFilter, dests = CountUnifyDestTarget(search, "Count")
+		err = ScanRow(row, modelValue, queryFilter, dests...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err != nil || search.Count.All < 1 || search.Count.UserID < 1 {
 			t.Error(err)
 			return
 		}
@@ -2074,6 +2148,11 @@ func testUnify(t *testing.T, queryer Queryer) {
 			return
 		}
 		rows.Close()
+		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 {
+			t.Error(err)
+			return
+		}
+		search = newSearch()
 		countSQL, countArgs := Default.CountUnifySQL(search)
 		row := queryer.QueryRow(context.Background(), countSQL, countArgs...)
 		modelValue, queryFilter, dests := Default.CountUnifyDest(search)
@@ -2082,7 +2161,20 @@ func testUnify(t *testing.T, queryer Queryer) {
 			t.Error(err)
 			return
 		}
-		if err != nil || len(search.Query.Objects) < 1 || len(search.Query.UserIDs) < 1 || search.Count.All < 1 || search.Count.UserID < 1 {
+		if search.Count.All < 1 || search.Count.UserID < 1 {
+			t.Error(err)
+			return
+		}
+		search = newSearch()
+		countSQL, countArgs = Default.CountUnifySQL(search)
+		row = queryer.QueryRow(context.Background(), countSQL, countArgs...)
+		modelValue, queryFilter, dests = Default.CountUnifyDestTarget(search, "Count")
+		err = Default.ScanRow(row, modelValue, queryFilter, dests...)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if search.Count.All < 1 || search.Count.UserID < 1 {
 			t.Error(err)
 			return
 		}
