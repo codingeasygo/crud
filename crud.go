@@ -1,4 +1,4 @@
-//Package crud is simple curd tools to process database
+// Package crud is simple curd tools to process database
 package crud
 
 import (
@@ -1141,6 +1141,32 @@ func (c *CRUD) destSet(value reflect.Value, filter string, dests ...interface{})
 		e = fmt.Errorf("field %v is not exists", key)
 		return
 	}
+	scanMap := func(i int, mapType reflect.Type, scan string, skipNil, skipZero bool) (v reflect.Value, e error) {
+		v = reflect.MakeMap(mapType)
+		for _, field := range strings.Split(scan, ",") {
+			parts := strings.SplitN(field, ":", 2)
+			key := reflect.ValueOf(parts[0])
+			var val reflect.Value
+			if len(parts) < 2 {
+				val, e = valueField(parts[0])
+			} else {
+				val, e = valueField(parts[1])
+			}
+			if e != nil {
+				break
+			}
+			if !key.CanConvert(mapType.Key()) {
+				e = fmt.Errorf("not supported on dests[%v].%v key to set %v=>%v", i-1, field, key.Type(), mapType.Key())
+				break
+			}
+			if !val.CanConvert(mapType.Elem()) {
+				e = fmt.Errorf("not supported on dests[%v].%v value to set %v=>%v", i-1, field, val.Type(), mapType.Elem())
+				break
+			}
+			v.SetMapIndex(key.Convert(mapType.Key()), val.Convert(mapType.Elem()))
+		}
+		return
+	}
 	n := len(dests)
 	for i := 0; i < n; i++ {
 		if scanner, ok := dests[i].(Scanner); ok {
@@ -1231,6 +1257,15 @@ func (c *CRUD) destSet(value reflect.Value, filter string, dests ...interface{})
 				skipNil, skipZero = false, false
 			}
 			i++
+			if destKind == reflect.Slice && destType.Elem().Kind() == reflect.Map {
+				targetValue, xerr := scanMap(i, destType.Elem(), parts[0], skipNil, skipZero)
+				if xerr != nil {
+					err = xerr
+					break
+				}
+				destValue.Set(reflect.Append(destValue, targetValue))
+				continue
+			}
 			targetValue, xerr := valueField(parts[0])
 			if xerr != nil {
 				err = xerr

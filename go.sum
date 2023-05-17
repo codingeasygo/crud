@@ -2,14 +2,6 @@ github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03
 github.com/Masterminds/semver/v3 v3.1.1/go.mod h1:VPu/7SZ7ePZ3QOrcuXROw5FAcLl4a0cBrbBpGY/8hQs=
 github.com/cockroachdb/apd v1.1.0 h1:3LFP3629v+1aKXU5Q37mxmRxX/pIu1nijXydLShEq5I=
 github.com/cockroachdb/apd v1.1.0/go.mod h1:8Sl8LxpKi29FqWXR16WEFZRNSz3SoPzUzeMeY4+DwBQ=
-github.com/codingeasygo/util v0.0.0-20221103081314-a6c91ccf3379 h1:CXtO4LWiFw5ssnY9gM9d6PPVIn588RZUr7WRrsSPf6o=
-github.com/codingeasygo/util v0.0.0-20221103081314-a6c91ccf3379/go.mod h1:CE705pc3Xn2F3nqMKhvfaigeXeDudpdteTzbf+2jwig=
-github.com/codingeasygo/util v0.0.0-20230503112844-cc5d0257e1a1 h1:/4CCGAdb/2Dbm0RjsA8cUbGSZ3yLcO+EZ+U1EgxWt+A=
-github.com/codingeasygo/util v0.0.0-20230503112844-cc5d0257e1a1/go.mod h1:CE705pc3Xn2F3nqMKhvfaigeXeDudpdteTzbf+2jwig=
-github.com/codingeasygo/util v0.0.0-20230503114557-b3a8799a05e3 h1:4LANQsL4mFyLWGQkW2JJShX2US1zlSol+zyAmEAT00k=
-github.com/codingeasygo/util v0.0.0-20230503114557-b3a8799a05e3/go.mod h1:CE705pc3Xn2F3nqMKhvfaigeXeDudpdteTzbf+2jwig=
-github.com/codingeasygo/util v0.0.0-20230503115544-1af95883547e h1:9I+cUgu83JEgfLQnQVvFd6MKDZlxS7/gd+Szl7h/ljE=
-github.com/codingeasygo/util v0.0.0-20230503115544-1af95883547e/go.mod h1:CE705pc3Xn2F3nqMKhvfaigeXeDudpdteTzbf+2jwig=
 github.com/codingeasygo/util v0.0.0-20230503125230-500450043938 h1:KVF5iw+wLoD1FsE8iKIm1FApGZNDulruUSc/yLz50RM=
 github.com/codingeasygo/util v0.0.0-20230503125230-500450043938/go.mod h1:CE705pc3Xn2F3nqMKhvfaigeXeDudpdteTzbf+2jwig=
 github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=

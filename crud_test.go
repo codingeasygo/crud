@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/codingeasygo/util/converter"
+	"github.com/codingeasygo/util/xmap"
 	"github.com/codingeasygo/util/xsql"
 	"github.com/shopspring/decimal"
 )
@@ -1231,6 +1232,8 @@ func testQuery(t *testing.T, queryer Queryer) {
 	{
 		var resultList []*CrudObject
 		var result *CrudObject
+		var resultList2 []xmap.M
+		var resultList3 []map[string]interface{}
 		var int64IDs0, int64IDs1 []int64
 		var images0, images1 []*string
 		var resultMap0 map[int64]*CrudObject
@@ -1241,6 +1244,8 @@ func testQuery(t *testing.T, queryer Queryer) {
 		err = QueryWheref(
 			queryer, context.Background(), object, "#all", "", nil, "", 0, 0,
 			&resultList, &result,
+			&resultList2, "user_id,count:tid",
+			&resultList3, "user_id,count:tid",
 			&int64IDs0, "int64_value",
 			&int64IDs1, "int64_value#all",
 			&images0, "image",
@@ -1573,6 +1578,25 @@ func testQuery(t *testing.T, queryer Queryer) {
 		err = Query(queryer, context.Background(), object, "tid,int_value#all", "select tid,int_value from crud_object", nil, &idMap, "tid:xxx")
 		if err == nil {
 			t.Errorf("%v,%v", err, idMap)
+			return
+		}
+	}
+	{ // map list error
+		var resultErr0 []map[int64]int64
+		err = Query(queryer, context.Background(), object, "tid,user_id#all", "select tid,user_id from crud_object", nil, &resultErr0, "abc")
+		if err == nil {
+			t.Errorf("%v,%v", err, resultErr0)
+			return
+		}
+		err = Query(queryer, context.Background(), object, "string_value,user_id#all", "select string_value,user_id from crud_object", nil, &resultErr0, "abc:user_id")
+		if err == nil {
+			t.Errorf("%v,%v", err, resultErr0)
+			return
+		}
+		var resultErr1 []map[string]int64
+		err = Query(queryer, context.Background(), object, "string_value,user_id#all", "select string_value,user_id from crud_object", nil, &resultErr1, "abc:string_value")
+		if err == nil {
+			t.Errorf("%v,%v", err, resultErr1)
 			return
 		}
 	}
