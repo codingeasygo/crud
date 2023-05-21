@@ -287,6 +287,7 @@ type AutoGen struct {
 	Schema        string
 	TypeMap       map[string][]string
 	NameConv      NameConv
+	FuncOver      template.FuncMap
 	GetQueryer    string
 	Out           string
 	OutPackage    string
@@ -303,7 +304,7 @@ type AutoGen struct {
 }
 
 func (g *AutoGen) FuncMap() (funcs template.FuncMap) {
-	return template.FuncMap{
+	funcs = template.FuncMap{
 		"JoinShowOption":  g.JoinShowOption,
 		"PrimaryField":    g.PrimaryField,
 		"FieldInvalid":    g.FieldInvalid,
@@ -313,6 +314,10 @@ func (g *AutoGen) FuncMap() (funcs template.FuncMap) {
 		"FieldJson":       g.FieldJson,
 		"FieldDefineType": g.FieldDefineType,
 	}
+	for k, v := range g.FuncOver {
+		funcs[k] = v
+	}
+	return
 }
 
 func (g *AutoGen) JoinShowOption(options []*Option, key, seq string) string {
