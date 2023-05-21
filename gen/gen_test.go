@@ -252,7 +252,8 @@ var SqliteGen = AutoGen{
 	},
 	FieldFilter: map[string]map[string]string{
 		"crud_object": {
-			FieldsOrder: "type,update_time,create_time",
+			FieldsOrder:   "type,update_time,create_time",
+			FieldsNotOmit: "tid",
 		},
 	},
 	CodeAddInit: map[string]string{

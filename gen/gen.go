@@ -263,6 +263,7 @@ const (
 	FieldsOrder    = "order"
 	FieldsFind     = "find"
 	FieldsScan     = "scan"
+	FieldsNotOmit  = "n_omit"
 )
 
 type AutoGen struct {
@@ -309,6 +310,7 @@ func (g *AutoGen) FuncMap() (funcs template.FuncMap) {
 		"FieldZero":       g.FieldZero,
 		"FieldType":       g.FieldType,
 		"FieldTags":       g.FieldTags,
+		"FieldJson":       g.FieldJson,
 		"FieldDefineType": g.FieldDefineType,
 	}
 }
@@ -434,6 +436,22 @@ func (g *AutoGen) FieldTags(s *Struct, field *Field) (allTag string) {
 	}
 	if len(tags) > 0 {
 		allTag = " " + strings.Join(tags, " ")
+	}
+	return
+}
+
+func (g *AutoGen) FieldJson(s *Struct, field *Field) (tag string) {
+	var fieldNotOmit = xsql.StringArray{}
+	if fieldConfig := g.FieldFilter[s.Table.Name]; len(fieldConfig) > 0 {
+		fieldOptional := fieldConfig[FieldsNotOmit]
+		if len(fieldOptional) > 0 {
+			fieldNotOmit = xsql.AsStringArray(strings.SplitN(fieldOptional, "#", 2)[0])
+		}
+	}
+	if fieldNotOmit.HavingOne(field.Column.Name) {
+		tag = field.Column.Name
+	} else {
+		tag = field.Column.Name + ",omitempty"
 	}
 	return
 }

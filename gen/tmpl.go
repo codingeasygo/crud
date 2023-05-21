@@ -30,7 +30,7 @@ const {{.Struct.Name}}OrderbyAll = "{{.Filter.Order}}"
 type {{ .Struct.Name }} struct {
 	T {{.TableNameType}}  %vjson:"-" table:"{{.Struct.Table.Name}}"%v /* the table name tag */
 {{- range .Struct.Fields }}
-	{{ .Name }} {{FieldType $.Struct . }}  %vjson:"{{.Column.Name}},omitempty"{{FieldTags $.Struct . }}%v /* {{ .Column.Comment }} */
+	{{ .Name }} {{FieldType $.Struct . }}  %vjson:"{{FieldJson $.Struct . }}"{{FieldTags $.Struct . }}%v /* {{ .Column.Comment }} */
 {{- end }}
 }
 `, "`", "`", "`", "`")
