@@ -425,22 +425,27 @@ func (c *CRUD) AppendWheref(where []string, args []interface{}, formats string, 
 	return
 }
 
-func AppendWhereUnify(where []string, args []interface{}, v interface{}) (where_ []string, args_ []interface{}) {
-	where_, args_ = Default.AppendWhereUnify(where, args, v)
+func AppendWhereUnify(where []string, args []interface{}, v interface{}, enabled ...string) (where_ []string, args_ []interface{}) {
+	where_, args_ = Default.AppendWhereUnify(where, args, v, enabled...)
 	return
 }
 
-func (c *CRUD) AppendWhereUnify(where []string, args []interface{}, v interface{}) (where_ []string, args_ []interface{}) {
+func (c *CRUD) AppendWhereUnify(where []string, args []interface{}, v interface{}, enabled ...string) (where_ []string, args_ []interface{}) {
 	where_, args_ = where, args
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
-	modelValue := reflectValue.FieldByName("Where")
-	if !modelValue.IsValid() {
-		return
+	if len(enabled) < 1 {
+		enabled = append(enabled, "Where")
 	}
-	modelType, _ := reflectValue.Type().FieldByName("Where")
-	filterWhere, filterArgs := c.FilterWhere(args, modelValue.Addr().Interface(), modelType.Tag.Get("filter"))
-	where_ = append(where_, filterWhere...)
-	args_ = append(args_, filterArgs...)
+	for _, key := range enabled {
+		modelValue := reflectValue.FieldByName(key)
+		if !modelValue.IsValid() {
+			continue
+		}
+		modelType, _ := reflectValue.Type().FieldByName(key)
+		filterWhere, filterArgs := c.FilterWhere(args, modelValue.Addr().Interface(), modelType.Tag.Get("filter"))
+		where_ = append(where_, filterWhere...)
+		args_ = append(args_, filterArgs...)
+	}
 	return
 }
 
@@ -500,21 +505,27 @@ func (c *CRUD) joinWheref(caller int, sql string, args []interface{}, formats st
 	return
 }
 
-func JoinWhereUnify(sql string, args []interface{}, v interface{}) (sql_ string, args_ []interface{}) {
-	sql_, args_ = Default.joinWhereUnify(1, sql, args, v)
+func JoinWhereUnify(sql string, args []interface{}, v interface{}, enabled ...string) (sql_ string, args_ []interface{}) {
+	sql_, args_ = Default.joinWhereUnify(1, sql, args, v, enabled...)
 	return
 }
 
-func (c *CRUD) JoinWhereUnify(sql string, args []interface{}, v interface{}) (sql_ string, args_ []interface{}) {
-	sql_, args_ = c.joinWhereUnify(1, sql, args, v)
+func (c *CRUD) JoinWhereUnify(sql string, args []interface{}, v interface{}, enabled ...string) (sql_ string, args_ []interface{}) {
+	sql_, args_ = c.joinWhereUnify(1, sql, args, v, enabled...)
 	return
 }
 
-func (c *CRUD) joinWhereUnify(caller int, sql string, args []interface{}, v interface{}) (sql_ string, args_ []interface{}) {
+func (c *CRUD) joinWhereUnify(caller int, sql string, args []interface{}, v interface{}, enabled ...string) (sql_ string, args_ []interface{}) {
 	reflectValue := reflect.Indirect(reflect.ValueOf(v))
 	reflectType := reflectValue.Type()
-	whereType, _ := reflectType.FieldByName("Where")
-	whereJoin := whereType.Tag.Get("join")
+	if len(enabled) < 1 {
+		enabled = append(enabled, "Where")
+	}
+	whereJoin := ""
+	for _, key := range enabled {
+		whereType, _ := reflectType.FieldByName(key)
+		whereJoin += " " + whereType.Tag.Get("join")
+	}
 	args_ = args
 	where, args_ := c.AppendWhereUnify(nil, args_, v)
 	sql_ = c.joinWhere(caller+1, sql, where, whereJoin)
@@ -1008,6 +1019,9 @@ func (c *CRUD) queryUnifySQL(caller int, v interface{}, field string) (sql strin
 	modelFrom := modelType.Tag.Get("from")
 	queryType, _ := reflectType.FieldByName(field)
 	queryValue := reflectValue.FieldByName(field)
+	if queryFrom := queryType.Tag.Get("from"); len(queryFrom) > 0 {
+		modelFrom = queryFrom
+	}
 	queryFilter := queryType.Tag.Get("filter")
 	querySelect := queryType.Tag.Get("select")
 	queryGroup := queryType.Tag.Get("group")
@@ -1641,6 +1655,9 @@ func (c *CRUD) countUnifySQL(caller int, v interface{}, key string) (sql string,
 	modelFrom := modelType.Tag.Get("from")
 	queryType, _ := reflectType.FieldByName(key)
 	queryFilter := queryType.Tag.Get("filter")
+	if queryFrom := queryType.Tag.Get("from"); len(queryFrom) > 0 {
+		modelFrom = queryFrom
+	}
 	querySelect := queryType.Tag.Get("select")
 	queryGroup := queryType.Tag.Get("group")
 	if len(querySelect) > 0 {

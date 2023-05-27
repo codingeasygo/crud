@@ -1848,10 +1848,10 @@ type ModelFromCrudObjectUnifyMini struct {
 	Query struct {
 		Objects []*CrudObject `json:"objects"`
 		UserIDs []int64       `json:"user_ids" scan:"user_id#all"`
-	} `json:"query" filter:"#all"`
+	} `json:"query" from:"crud_object o" filter:"#all"`
 	Count struct {
 		All int64 `json:"all" scan:"tid"`
-	} `json:"count" filter:"o.count(tid)#all"`
+	} `json:"count" from:"crud_object o" filter:"o.count(tid)#all"`
 }
 
 type ModelSelectCrudObjectUnify struct {
