@@ -1964,15 +1964,30 @@ func testUnify(t *testing.T, queryer Queryer) {
 			t.Error(err)
 			return
 		}
+		err = ApplyUnify(queryer, context.Background(), skip, "ApplyCount")
+		if err != nil || skip.ApplyCount.All < 1 {
+			t.Error(err)
+			return
+		}
 		min := newMin()
 		err = ApplyUnify(queryer, context.Background(), min)
 		if err != nil || len(min.Query.Objects) < 1 || len(min.Query.UserIDs) < 1 {
 			t.Error(err)
 			return
 		}
+		err = ApplyUnify(queryer, context.Background(), min, "ApplyQuery")
+		if err != nil || len(min.ApplyQuery.Objects) < 1 {
+			t.Error(err)
+			return
+		}
 		find := newFind()
 		err = Default.ApplyUnify(queryer, context.Background(), find)
 		if err != nil || find.QueryRow.Object == nil || find.QueryRow.UserID < 1 {
+			t.Error(err)
+			return
+		}
+		err = Default.ApplyUnify(queryer, context.Background(), find, "ApplyQueryRow")
+		if err != nil || find.ApplyQueryRow.Object == nil || find.ApplyQueryRow.UserID < 1 {
 			t.Error(err)
 			return
 		}

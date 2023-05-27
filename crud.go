@@ -1855,7 +1855,7 @@ func (c *CRUD) applyUnify(caller int, queryer interface{}, ctx context.Context, 
 		fieldType := reflectType.Field(i)
 		fieldValue := reflectValue.Field(i)
 		apply := fieldType.Tag.Get("apply")
-		if len(apply) < 1 || !isEnabled(fieldType.Name) {
+		if len(apply) < 1 || !enabledAll.HavingOne(fieldType.Name) {
 			continue
 		}
 		switch apply {
